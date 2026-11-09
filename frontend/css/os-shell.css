@@ -1,0 +1,182 @@
+/* CRT Power-On Horizontal Line Expand Effect */
+@keyframes crtTurnOn {
+  0% { transform: scale(0.01, 0.005); filter: brightness(10); }
+  45% { transform: scale(1, 0.005); filter: brightness(5); }
+  100% { transform: scale(1, 1); filter: brightness(1); }
+}
+
+.crt-boot-flash {
+  animation: crtTurnOn 0.45s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+/* STAGE 1: BIOS POST SCREEN */
+.bios-screen {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  color: #ccc;
+  padding: 18px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.bios-header {
+  color: #00ff66;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.bios-line {
+  margin: 4px 0;
+}
+
+.bios-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: #00ff66;
+  animation: blink 0.5s infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* STAGE 2: CHRONOS 95 CLOUD SPLASH SCREEN (Pure CSS!) */
+.splash-screen {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #3a7bd5 0%, #8ca6db 65%, #d4e4f7 92%);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  font-family: Tahoma, sans-serif;
+}
+
+.splash-center {
+  margin-top: 95px;
+  text-align: center;
+  z-index: 2;
+}
+
+.splash-logo-flag {
+  font-size: 46px;
+  margin-bottom: 6px;
+  text-shadow: 3px 3px 0px rgba(0,0,0,0.3);
+}
+
+.splash-title {
+  font-size: 36px;
+  font-weight: 900;
+  color: #111;
+  letter-spacing: -1px;
+  text-shadow: 1px 1px 0px #fff;
+}
+
+.splash-title span {
+  color: #fff;
+  background: #000;
+  padding: 0 6px;
+  font-weight: normal;
+  font-size: 28px;
+}
+
+.splash-subtitle {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #1a2a4a;
+}
+
+/* Iconic 1995 Bottom Sliding Progress Ribbon */
+.splash-loading-bar {
+  width: 100%;
+  height: 18px;
+  background: linear-gradient(90deg, #000080, #00bfff, #ffff00, #000080);
+  background-size: 200% 100%;
+  animation: ribbonSlide 1.1s linear infinite;
+  border-top: 2px solid #222;
+}
+
+@keyframes ribbonSlide {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 200% 0%; }
+}
+
+/* STAGE 3: RUNNING CHRONOS 95 DESKTOP */
+#os-desktop {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+}
+
+/* Pop-up Start Menu */
+.start-menu {
+  position: absolute;
+  bottom: 32px;
+  left: 2px;
+  width: 195px;
+  background: #c0c0c0;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  border-right: 2px solid #222;
+  border-bottom: 2px solid #222;
+  display: flex;
+  z-index: 100;
+  box-shadow: 3px 3px 6px rgba(0,0,0,0.4);
+}
+
+.start-banner {
+  width: 26px;
+  background: linear-gradient(180deg, #000080, #1084d0);
+  color: #fff;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 10px;
+}
+
+.start-banner span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-weight: bold;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.start-items {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+}
+
+.start-item {
+  padding: 7px 10px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #000;
+}
+
+.start-item:hover {
+  background: #000080;
+  color: #fff;
+}
+
+.start-divider {
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #fff;
+  margin: 3px 0;
+}

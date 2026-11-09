@@ -208,53 +208,99 @@ body {
   gap: 30px;
 }
 
+/* FULL-SIZE 3-ZONE MECHANICAL KEYBOARD */
 .keyboard {
-  width: 580px;
   background: #d4d0c8;
-  padding: 12px;
+  padding: 10px 14px;
   border-top: 3px solid #fff;
   border-left: 3px solid #fff;
   border-right: 5px solid #777;
   border-bottom: 6px solid #666;
   border-radius: 6px;
   display: flex;
+  gap: 14px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+}
+
+.kb-main, .kb-nav, .kb-numpad {
+  display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+}
+
+.func-row {
+  margin-bottom: 5px;
+}
+
+.f-gap {
+  width: 10px;
 }
 
 .key-row {
   display: flex;
-  justify-content: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .key {
-  width: 42px;
-  height: 32px;
+  width: 28px;
+  height: 24px;
   background: #e4e0d8;
   border-top: 2px solid #fff;
   border-left: 2px solid #fff;
-  border-right: 3px solid #777;
-  border-bottom: 4px solid #666;
-  border-radius: 3px;
+  border-right: 2px solid #777;
+  border-bottom: 3px solid #555;
+  border-radius: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  font-size: 12px;
-  color: #333;
-  transition: transform 0.05s;
+  font-size: 9px;
+  color: #222;
+  transition: transform 0.04s;
 }
 
-.key.space-key { width: 240px; }
+/* Proportional Key Widths */
+.w-back { width: 50px; }
+.w-tab { width: 42px; }
+.w-slash { width: 36px; }
+.w-caps { width: 48px; }
+.w-enter { width: 58px; }
+.w-shift { width: 66px; }
+.w-mod { width: 38px; }
+.w-space { width: 184px; }
+.w-num0 { width: 60px; }
 
-/* Triggered by JS when you type on your real keyboard! */
+.nav-spacer { height: 24px; }
+.arrow-up-row { justify-content: center; }
+
+.numpad-leds {
+  height: 24px;
+  margin-bottom: 5px;
+  background: #bab6ae;
+  border: 1px inset #999;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 10px;
+}
+
+.kb-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #444;
+}
+
+.kb-led.on {
+  background: #00ff44;
+  box-shadow: 0 0 5px #00ff44;
+}
+
 .key.pressed {
   background: #ffcf40;
   transform: translateY(2px);
-  border-bottom: 2px solid #444;
+  border-bottom: 1px solid #444;
 }
-
 /* MOUSEPAD & RETRO MOUSE */
 .mousepad {
   width: 190px;

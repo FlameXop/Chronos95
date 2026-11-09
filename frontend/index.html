@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Chronos 95 - Neural Desktop</title>
   <link rel="stylesheet" href="css/hardware.css" />
+  <link rel="stylesheet" href="css/os-shell.css" />
 </head>
 <body>
 
-  <!-- THE FULL COMPUTER DESK SCENE -->
   <div class="desk-container">
 
     <!-- TOP ROW: CRT MONITOR + PC CASE -->
@@ -17,18 +17,35 @@
       <!-- 1. CRT MONITOR -->
       <div class="crt-monitor">
         <div class="crt-bezel">
-          <!-- THE ACTUAL SCREEN (Starts OFF/Black) -->
           <div id="crt-screen" class="crt-screen state-off">
             
-            <!-- Boot Screen Overlay -->
-            <div id="boot-screen" class="hidden">
-              <p>CHRONOS BIOS v1.95 (C) 1995-2026</p>
-              <p>Memory Test: 640K OK</p>
-              <p>Initializing Neural Co-Processor...</p>
-              <div class="boot-loader">Starting Chronos 95...</div>
+            <!-- STAGE 1: BIOS POST SCREEN -->
+            <div id="bios-screen" class="bios-screen hidden">
+              <div>
+                <div class="bios-header">CHRONOS MODULAR BIOS v4.50PG, An Energy Star Ally</div>
+                <div class="bios-line">Copyright (C) 1995-2026, Chronos Systems Inc.</div>
+                <div class="bios-line">CPU : INTEL PENTIUM-S 133MHz + NEURAL CO-PROCESSOR</div>
+                <div class="bios-line" id="bios-mem">Memory Test : 65536K OK</div>
+                <br />
+                <div class="bios-line">Detecting Primary Master ... QUANTUM FIREBALL 1.2GB</div>
+                <div class="bios-line">Detecting Neural API Bridge ... READY</div>
+                <br />
+                <div class="bios-line">Booting from C:\CHRONOS95 ... <span class="bios-cursor"></span></div>
+              </div>
+              <div class="bios-line">Press DEL to enter SETUP</div>
             </div>
 
-            <!-- The OS Desktop (Revealed when RUNNING) -->
+            <!-- STAGE 2: CSS CLOUD SPLASH SCREEN -->
+            <div id="splash-screen" class="splash-screen hidden">
+              <div class="splash-center">
+                <div class="splash-logo-flag">🪟</div>
+                <div class="splash-title">Chronos <span>95</span></div>
+                <div class="splash-subtitle">Neural Workstation Edition</div>
+              </div>
+              <div class="splash-loading-bar"></div>
+            </div>
+
+            <!-- STAGE 3: RUNNING OS DESKTOP -->
             <div id="os-desktop" class="hidden">
               <div class="desktop-icons">
                 <div class="icon" id="icon-notepad">📝<span>NotePad.exe</span></div>
@@ -37,10 +54,22 @@
 
               <!-- Chippy Assistant -->
               <div id="chippy-widget" class="chippy-box">
-                <div class="chippy-bubble">
-                  Hey! I'm <b>Chippy</b>. Click Start or open an app—I'm connected to the AI Brain!
+                <div class="chippy-bubble" id="chippy-text">
+                  Hey! I'm <b>Chippy</b>. Click Start or open NotePad / PixelPaint!
                 </div>
-                <div class="chippy-avatar">📎</div>
+                <div class="chippy-avatar" title="Click to toggle Chippy">📎</div>
+              </div>
+
+              <!-- Pop-up Start Menu -->
+              <div id="start-menu" class="start-menu hidden">
+                <div class="start-banner"><span>CHRONOS 95</span></div>
+                <div class="start-items">
+                  <div class="start-item" id="menu-notepad">📝 NotePad.exe</div>
+                  <div class="start-item" id="menu-paint">🎨 PixelPaint.exe</div>
+                  <div class="start-item" id="menu-chippy">📎 Ask Chippy Brain</div>
+                  <div class="start-divider"></div>
+                  <div class="start-item" id="menu-shutdown">🔌 Shut Down...</div>
+                </div>
               </div>
 
               <!-- Bottom 95 Taskbar -->
@@ -55,7 +84,7 @@
         <div class="monitor-brand">CHRONOS SYNCMASTER 15"</div>
       </div>
 
-      <!-- 2. PC TOWER ON THE RIGHT -->
+      <!-- 2. PC TOWER -->
       <div class="pc-tower">
         <div class="drive-bay">
           <div class="cd-slot"></div>
@@ -64,13 +93,11 @@
         <div class="drive-bay floppy">
           <div class="floppy-slot"></div>
         </div>
-        
         <div class="tower-controls">
           <div class="led-group">
             <span id="power-led" class="led off"></span>
             <span class="led-label">PWR</span>
           </div>
-          <!-- PHYSICAL POWER BUTTON -->
           <button id="power-btn" class="power-btn" title="Press to Boot PC">⏻</button>
         </div>
         <div class="tower-vents"></div>
@@ -78,40 +105,182 @@
 
     </div>
 
-    <!-- BOTTOM ROW: KEYBOARD + MOUSE ON MAT -->
+    <!-- BOTTOM ROW: FULL 104-KEY KEYBOARD + MOUSEPAD -->
     <div class="bottom-rig">
       
-      <!-- 3. RETRO KEYBOARD -->
+      <!-- 3. FULL-SIZE 3-SECTION MECHANICAL KEYBOARD -->
       <div class="keyboard" id="retro-keyboard">
-        <div class="key-row">
-          <div class="key" data-key="q">Q</div>
-          <div class="key" data-key="w">W</div>
-          <div class="key" data-key="e">E</div>
-          <div class="key" data-key="r">R</div>
-          <div class="key" data-key="t">T</div>
-          <div class="key" data-key="y">Y</div>
-          <div class="key" data-key="u">U</div>
-          <div class="key" data-key="i">I</div>
-          <div class="key" data-key="o">O</div>
-          <div class="key" data-key="p">P</div>
+        
+        <!-- SECTION A: MAIN ALPHANUMERIC + FUNCTION ROW -->
+        <div class="kb-main">
+          <!-- Function Row -->
+          <div class="key-row func-row">
+            <div class="key" data-code="Escape">ESC</div>
+            <div class="f-gap"></div>
+            <div class="key" data-code="F1">F1</div>
+            <div class="key" data-code="F2">F2</div>
+            <div class="key" data-code="F3">F3</div>
+            <div class="key" data-code="F4">F4</div>
+            <div class="f-gap"></div>
+            <div class="key" data-code="F5">F5</div>
+            <div class="key" data-code="F6">F6</div>
+            <div class="key" data-code="F7">F7</div>
+            <div class="key" data-code="F8">F8</div>
+            <div class="f-gap"></div>
+            <div class="key" data-code="F9">F9</div>
+            <div class="key" data-code="F10">F10</div>
+            <div class="key" data-code="F11">F11</div>
+            <div class="key" data-code="F12">F12</div>
+          </div>
+
+          <!-- Number Row -->
+          <div class="key-row">
+            <div class="key" data-code="Backquote">`</div>
+            <div class="key" data-code="Digit1">1</div>
+            <div class="key" data-code="Digit2">2</div>
+            <div class="key" data-code="Digit3">3</div>
+            <div class="key" data-code="Digit4">4</div>
+            <div class="key" data-code="Digit5">5</div>
+            <div class="key" data-code="Digit6">6</div>
+            <div class="key" data-code="Digit7">7</div>
+            <div class="key" data-code="Digit8">8</div>
+            <div class="key" data-code="Digit9">9</div>
+            <div class="key" data-code="Digit0">0</div>
+            <div class="key" data-code="Minus">-</div>
+            <div class="key" data-code="Equal">=</div>
+            <div class="key w-back" data-code="Backspace">BKSP</div>
+          </div>
+
+          <!-- QWERTY Row -->
+          <div class="key-row">
+            <div class="key w-tab" data-code="Tab">TAB</div>
+            <div class="key" data-code="KeyQ">Q</div>
+            <div class="key" data-code="KeyW">W</div>
+            <div class="key" data-code="KeyE">E</div>
+            <div class="key" data-code="KeyR">R</div>
+            <div class="key" data-code="KeyT">T</div>
+            <div class="key" data-code="KeyY">Y</div>
+            <div class="key" data-code="KeyU">U</div>
+            <div class="key" data-code="KeyI">I</div>
+            <div class="key" data-code="KeyO">O</div>
+            <div class="key" data-code="KeyP">P</div>
+            <div class="key" data-code="BracketLeft">[</div>
+            <div class="key" data-code="BracketRight">]</div>
+            <div class="key w-slash" data-code="Backslash">\</div>
+          </div>
+
+          <!-- Home Row -->
+          <div class="key-row">
+            <div class="key w-caps" data-code="CapsLock">CAPS</div>
+            <div class="key" data-code="KeyA">A</div>
+            <div class="key" data-code="KeyS">S</div>
+            <div class="key" data-code="KeyD">D</div>
+            <div class="key" data-code="KeyF">F</div>
+            <div class="key" data-code="KeyG">G</div>
+            <div class="key" data-code="KeyH">H</div>
+            <div class="key" data-code="KeyJ">J</div>
+            <div class="key" data-code="KeyK">K</div>
+            <div class="key" data-code="KeyL">L</div>
+            <div class="key" data-code="Semicolon">;</div>
+            <div class="key" data-code="Quote">'</div>
+            <div class="key w-enter" data-code="Enter">ENTER</div>
+          </div>
+
+          <!-- Shift Row -->
+          <div class="key-row">
+            <div class="key w-shift" data-code="ShiftLeft">SHIFT</div>
+            <div class="key" data-code="KeyZ">Z</div>
+            <div class="key" data-code="KeyX">X</div>
+            <div class="key" data-code="KeyC">C</div>
+            <div class="key" data-code="KeyV">V</div>
+            <div class="key" data-code="KeyB">B</div>
+            <div class="key" data-code="KeyN">N</div>
+            <div class="key" data-code="KeyM">M</div>
+            <div class="key" data-code="Comma">,</div>
+            <div class="key" data-code="Period">.</div>
+            <div class="key" data-code="Slash">/</div>
+            <div class="key w-shift" data-code="ShiftRight">SHIFT</div>
+          </div>
+
+          <!-- Bottom Modifiers + Spacebar -->
+          <div class="key-row">
+            <div class="key w-mod" data-code="ControlLeft">CTRL</div>
+            <div class="key w-mod" data-code="MetaLeft">WIN</div>
+            <div class="key w-mod" data-code="AltLeft">ALT</div>
+            <div class="key w-space" data-code="Space"></div>
+            <div class="key w-mod" data-code="AltRight">ALT</div>
+            <div class="key w-mod" data-code="ContextMenu">MENU</div>
+            <div class="key w-mod" data-code="ControlRight">CTRL</div>
+          </div>
         </div>
-        <div class="key-row">
-          <div class="key" data-key="a">A</div>
-          <div class="key" data-key="s">S</div>
-          <div class="key" data-key="d">D</div>
-          <div class="key" data-key="f">F</div>
-          <div class="key" data-key="g">G</div>
-          <div class="key" data-key="h">H</div>
-          <div class="key" data-key="j">J</div>
-          <div class="key" data-key="k">K</div>
-          <div class="key" data-key="l">L</div>
+
+        <!-- SECTION B: NAVIGATION & ARROW KEYS -->
+        <div class="kb-nav">
+          <div class="key-row func-row">
+            <div class="key" data-code="PrintScreen">PRT</div>
+            <div class="key" data-code="ScrollLock">SCR</div>
+            <div class="key" data-code="Pause">PAU</div>
+          </div>
+          <div class="key-row">
+            <div class="key" data-code="Insert">INS</div>
+            <div class="key" data-code="Home">HM</div>
+            <div class="key" data-code="PageUp">PU</div>
+          </div>
+          <div class="key-row">
+            <div class="key" data-code="Delete">DEL</div>
+            <div class="key" data-code="End">END</div>
+            <div class="key" data-code="PageDown">PD</div>
+          </div>
+          <div class="nav-spacer"></div>
+          <div class="key-row arrow-up-row">
+            <div class="key" data-code="ArrowUp">▲</div>
+          </div>
+          <div class="key-row">
+            <div class="key" data-code="ArrowLeft">◄</div>
+            <div class="key" data-code="ArrowDown">▼</div>
+            <div class="key" data-code="ArrowRight">►</div>
+          </div>
         </div>
-        <div class="key-row">
-          <div class="key space-key" data-key=" ">SPACE</div>
+
+        <!-- SECTION C: RIGHT-SIDE NUMPAD -->
+        <div class="kb-numpad">
+          <div class="numpad-leds">
+            <span class="kb-led on"></span>
+            <span class="kb-led"></span>
+            <span class="kb-led"></span>
+          </div>
+          <div class="key-row">
+            <div class="key" data-code="NumLock">NUM</div>
+            <div class="key" data-code="NumpadDivide">/</div>
+            <div class="key" data-code="NumpadMultiply">*</div>
+            <div class="key" data-code="NumpadSubtract">-</div>
+          </div>
+          <div class="key-row">
+            <div class="key" data-code="Numpad7">7</div>
+            <div class="key" data-code="Numpad8">8</div>
+            <div class="key" data-code="Numpad9">9</div>
+            <div class="key" data-code="NumpadAdd">+</div>
+          </div>
+          <div class="key-row">
+            <div class="key" data-code="Numpad4">4</div>
+            <div class="key" data-code="Numpad5">5</div>
+            <div class="key" data-code="Numpad6">6</div>
+            <div class="key" data-code="NumpadEnter">ENT</div>
+          </div>
+          <div class="key-row">
+            <div class="key" data-code="Numpad1">1</div>
+            <div class="key" data-code="Numpad2">2</div>
+            <div class="key" data-code="Numpad3">3</div>
+            <div class="key" data-code="NumpadDecimal">.</div>
+          </div>
+          <div class="key-row">
+            <div class="key w-num0" data-code="Numpad0">0</div>
+          </div>
         </div>
+
       </div>
 
-      <!-- 4. MOUSEPAD & MOVING RETRO MOUSE -->
+      <!-- 4. MOUSEPAD & RETRO MOUSE -->
       <div class="mousepad" id="mousepad">
         <div class="retro-mouse" id="retro-mouse">
           <div class="mouse-buttons">
@@ -125,7 +294,6 @@
 
   </div>
 
-  <!-- Connect our modular JS Entry File -->
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/core/main.js"></script>
 </body>
 </html>

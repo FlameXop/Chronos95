@@ -1,39 +1,63 @@
-import { eventBus } from './core/eventBus.js';
-import { store, PowerState } from './core/store.js';
+import { eventBus } from './eventBus.js';
+import { store, PowerState } from './store.js';
+import { soundEngine } from './hardware/soundEngine.js';
 
-// 1. Grab Hardware DOM Elements
+// Grab DOM Elements
 const powerBtn = document.getElementById('power-btn');
 const powerLed = document.getElementById('power-led');
 const crtScreen = document.getElementById('crt-screen');
-const bootScreen = document.getElementById('boot-screen');
+const biosScreen = document.getElementById('bios-screen');
+const splashScreen = document.getElementById('splash-screen');
 const osDesktop = document.getElementById('os-desktop');
+
+const startBtn = document.getElementById('start-btn');
+const startMenu = document.getElementById('start-menu');
+const menuShutdown = document.getElementById('menu-shutdown');
+
 const retroMouse = document.getElementById('retro-mouse');
 const mouseLeft = document.getElementById('mouse-left');
+const mouseRight = document.getElementById('mouse-right');
 
-// 2. When User Clicks the Physical Power Button on the Tower
+let bootTimers = [];
+
+function clearBootTimers() {
+  bootTimers.forEach((t) => clearTimeout(t));
+  bootTimers = [];
+}
+
+// 1. Physical Power Button Handler
 powerBtn.addEventListener('click', () => {
   const currentPower = store.getState().power;
+  clearBootTimers();
 
   if (currentPower === PowerState.OFF) {
-    // Transition State: OFF -> BOOTING
+    // Stage 1: BIOS POST + Motherboard Beep
+    soundEngine.playBiosBeep();
     store.setPowerState(PowerState.BOOTING);
 
-    // After 2.2 seconds of BIOS boot text, transition to RUNNING!
-    setTimeout(() => {
+    // Stage 2: After 1.6s, switch from BIOS to Chronos 95 Cloud Splash
+    bootTimers.push(setTimeout(() => {
+      biosScreen.classList.add('hidden');
+      splashScreen.classList.remove('hidden');
+    }, 1600));
+
+    // Stage 3: After 3.6s total, play Startup Chime & enter Desktop!
+    bootTimers.push(setTimeout(() => {
+      soundEngine.playStartupChime();
       store.setPowerState(PowerState.RUNNING);
-    }, 2200);
+    }, 3600));
   } else {
-    // Turn PC Off
     store.setPowerState(PowerState.OFF);
   }
 });
 
-// 3. Listen to State Machine Changes (Decoupled!)
+// 2. React to Power State Changes
 eventBus.on('POWER_STATE_CHANGED', (newPowerState) => {
-  // Reset screen classes
   crtScreen.className = 'crt-screen';
-  bootScreen.classList.add('hidden');
+  biosScreen.classList.add('hidden');
+  splashScreen.classList.add('hidden');
   osDesktop.classList.add('hidden');
+  startMenu.classList.add('hidden');
 
   if (newPowerState === PowerState.OFF) {
     powerLed.className = 'led off';
@@ -41,8 +65,8 @@ eventBus.on('POWER_STATE_CHANGED', (newPowerState) => {
   } 
   else if (newPowerState === PowerState.BOOTING) {
     powerLed.className = 'led on';
-    crtScreen.classList.add('state-booting');
-    bootScreen.classList.remove('hidden');
+    crtScreen.classList.add('state-booting', 'crt-boot-flash');
+    biosScreen.classList.remove('hidden');
   } 
   else if (newPowerState === PowerState.RUNNING) {
     powerLed.className = 'led on';
@@ -51,25 +75,47 @@ eventBus.on('POWER_STATE_CHANGED', (newPowerState) => {
   }
 });
 
-// 4. Real-Time Desk Mouse Movement (Tracks your real cursor!)
+// 3. Start Button & Shut Down Menu
+startBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  startMenu.classList.toggle('hidden');
+});
+
+menuShutdown.addEventListener('click', () => {
+  clearBootTimers();
+  store.setPowerState(PowerState.OFF);
+});
+
+// Close Start Menu when clicking elsewhere on the desktop
+osDesktop.addEventListener('click', () => {
+  startMenu.classList.add('hidden');
+});
+
+// 4. Real-Time Desk Mouse Movement & Button Clicks
 window.addEventListener('mousemove', (e) => {
-  // Calculate offset from center of screen, scaled down so mouse stays on pad
-  const moveX = ((e.clientX / window.innerWidth) - 0.5) * 80;
+  const moveX = ((e.clientX / window.innerWidth) - 0.5) * 85;
   const moveY = ((e.clientY / window.innerHeight) - 0.5) * 45;
   retroMouse.style.transform = `translate(${moveX}px, ${moveY}px)`;
 });
 
-// Flash left mouse button on the desk when user clicks!
-window.addEventListener('mousedown', () => mouseLeft.classList.add('clicked'));
-window.addEventListener('mouseup', () => mouseLeft.classList.remove('clicked'));
+window.addEventListener('mousedown', (e) => {
+  if (e.button === 2) mouseRight.classList.add('clicked');
+  else mouseLeft.classList.add('clicked');
+});
 
-// 5. Real-Time Keyboard Key Press Lighting!
+window.addEventListener('mouseup', () => {
+  mouseLeft.classList.remove('clicked');
+  mouseRight.classList.remove('clicked');
+});
+
+// 5. Full 104-Key Keyboard Highlight + Mechanical Click Sound
 window.addEventListener('keydown', (e) => {
-  const keyEl = document.querySelector(`.key[data-key="${e.key.toLowerCase()}"]`);
+  if (!e.repeat) soundEngine.playKeyClick();
+  const keyEl = document.querySelector(`.key[data-code="${e.code}"]`);
   if (keyEl) keyEl.classList.add('pressed');
 });
 
 window.addEventListener('keyup', (e) => {
-  const keyEl = document.querySelector(`.key[data-key="${e.key.toLowerCase()}"]`);
+  const keyEl = document.querySelector(`.key[data-code="${e.code}"]`);
   if (keyEl) keyEl.classList.remove('pressed');
 });
