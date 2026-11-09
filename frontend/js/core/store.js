@@ -1,6 +1,5 @@
 import { eventBus } from './eventBus.js';
 
-// Enum-style constants (just like C++ enum) so we never make typos
 export const PowerState = {
   OFF: 'OFF',
   BOOTING: 'BOOTING',
@@ -12,11 +11,12 @@ class Store {
   constructor() {
     this.state = {
       power: PowerState.OFF,
-      startMenuOpen: false,
-      activeWindow: null, // 'notepad' | 'paint' | null
-      windows: {
-        notepad: { isOpen: false },
-        paint: { isOpen: false }
+      volume: 0.8,       // 0.0 to 1.0 (80% default)
+      muted: false,
+      locks: {
+        num: true,
+        caps: false,
+        scroll: false
       }
     };
   }
@@ -25,11 +25,24 @@ class Store {
     return this.state;
   }
 
-  // Transition the computer's power state safely
   setPowerState(newPowerState) {
     this.state.power = newPowerState;
-    // Tell the whole app that the power state changed!
     eventBus.emit('POWER_STATE_CHANGED', this.state.power);
+  }
+
+  setVolume(vol, muted = this.state.muted) {
+    this.state.volume = Math.max(0, Math.min(1, vol));
+    this.state.muted = muted;
+    eventBus.emit('AUDIO_STATE_CHANGED', {
+      volume: this.state.volume,
+      muted: this.state.muted,
+      effectiveVolume: this.state.muted ? 0 : this.state.volume
+    });
+  }
+
+  setLocks(locksObj) {
+    this.state.locks = { ...this.state.locks, ...locksObj };
+    eventBus.emit('LOCKS_CHANGED', this.state.locks);
   }
 }
 

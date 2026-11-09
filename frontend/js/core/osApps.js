@@ -120,41 +120,114 @@ class OSWindowManager {
   // DEFINITIONS FOR OUR 4 DESKTOP APPS
   getAppConfig(appId) {
     const apps = {
-      // 1. CHRONOS EXPLORER (AI BROWSER)
+     // 1. MULTI-TAB CHRONOS EXPLORER (Starts at http://welcome.com)
       explorer: {
-        title: '🌍 Chronos Explorer - [Neural Web]',
-        width: '490px', height: '330px', left: '75px', top: '18px',
+        title: '🌍 Chronos Explorer - [Multi-Tab AI Web]',
+        width: '505px', height: '345px', left: '70px', top: '16px',
         html: `
+          <div class="browser-tabs-bar" id="exp-tabs-bar"></div>
           <div class="browser-bar">
-            <span>Address:</span>
-            <input type="text" id="exp-query" value="chronos://welcome-to-1995-ai-web" placeholder="Ask or search anything..." />
+            <span>URL:</span>
+            <input type="text" id="exp-query" value="http://welcome.com" placeholder="Type URL or ask AI anything..." />
             <button id="exp-go" class="win95-btn">Go</button>
           </div>
-          <div id="exp-viewport" class="browser-viewport">
-            <h2 class="retro-page-title">Welcome to Chronos Explorer 1.0</h2>
-            <p>The 90s browser people loved to hate—now resurrected with an <b>AI Neural Engine</b>!</p>
-            <hr style="margin:6px 0;" />
-            <p>Type <b>any topic, question, or idea</b> in the Address Bar above and click <b>Go</b> to generate an instant webpage.</p>
-          </div>
+          <div id="exp-viewport" class="browser-viewport"></div>
         `,
         onMount: (win) => {
+          const tabsBar = win.querySelector('#exp-tabs-bar');
           const input = win.querySelector('#exp-query');
-          const btn = win.querySelector('#exp-go');
+          const goBtn = win.querySelector('#exp-go');
           const view = win.querySelector('#exp-viewport');
 
-          const runSearch = async () => {
-            const q = input.value.trim();
-            if (!q) return;
-            view.innerHTML = `<p><i>⌛ Dialing Neural Web for "${q}"...</i></p>`;
-            const reply = await askNeuralBrain(q, 'browser');
-            view.innerHTML = reply;
+          const defaultWelcomeHTML = `
+            <h2 class="retro-page-title">Welcome to http://welcome.com</h2>
+            <p>You are browsing on <b>Chronos Explorer 1.0</b> with Multi-Tab Neural Rendering.</p>
+            <hr style="margin:6px 0;" />
+            <p>✨ <b>How to use:</b> Type any topic, question, or fake URL in the address bar and hit <b>Go</b>, or click <b>[+]</b> above to open a new tab!</p>
+          `;
+
+          let tabs = [
+            { id: 1, title: 'welcome.com', url: 'http://welcome.com', content: defaultWelcomeHTML }
+          ];
+          let activeTabId = 1;
+          let nextTabId = 2;
+
+          const renderTabs = () => {
+            tabsBar.innerHTML = '';
+            tabs.forEach((t) => {
+              const tabEl = document.createElement('div');
+              tabEl.className = `browser-tab ${t.id === activeTabId ? 'active' : ''}`;
+              tabEl.innerHTML = `
+                <span>${t.title.slice(0, 12)}</span>
+                ${tabs.length > 1 ? `<b class="tab-close" data-close-tab="${t.id}">×</b>` : ''}
+              `;
+              tabEl.addEventListener('click', (e) => {
+                if (e.target.dataset.closeTab) {
+                  const closeId = Number(e.target.dataset.closeTab);
+                  tabs = tabs.filter((item) => item.id !== closeId);
+                  if (activeTabId === closeId) activeTabId = tabs[tabs.length - 1].id;
+                  renderTabs();
+                  return;
+                }
+                activeTabId = t.id;
+                renderTabs();
+              });
+              tabsBar.appendChild(tabEl);
+            });
+
+            // '+' Add New Tab Button
+            const addBtn = document.createElement('button');
+            addBtn.className = 'win95-btn tab-add-btn';
+            addBtn.textContent = '+';
+            addBtn.title = 'New Tab';
+            addBtn.addEventListener('click', () => {
+              const newTab = {
+                id: nextTabId++,
+                title: 'welcome.com',
+                url: '',
+                content: defaultWelcomeHTML
+              };
+              tabs.push(newTab);
+              activeTabId = newTab.id;
+              renderTabs();
+            });
+            tabsBar.appendChild(addBtn);
+
+            // Sync active tab URL & Viewport
+            const current = tabs.find((item) => item.id === activeTabId);
+            if (current) {
+              input.value = current.url;
+              view.innerHTML = current.content;
+            }
           };
 
-          btn.addEventListener('click', runSearch);
+          const runSearch = async () => {
+            const current = tabs.find((item) => item.id === activeTabId);
+            if (!current) return;
+            const q = input.value.trim();
+            if (!q) return;
+
+            current.url = q;
+            current.title = q.replace(/^https?:\/\//, '');
+            if (q.toLowerCase() === 'http://welcome.com' || q.toLowerCase() === 'welcome.com') {
+              current.content = defaultWelcomeHTML;
+              renderTabs();
+              return;
+            }
+
+            current.content = `<p><i>⌛ Dialing Neural Web for "${q}"...</i></p>`;
+            renderTabs();
+
+            const reply = await askNeuralBrain(q, 'browser');
+            current.content = reply;
+            renderTabs();
+          };
+
+          goBtn.addEventListener('click', runSearch);
           input.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
+          renderTabs();
         }
       },
-
       // 2. PERSISTENT NOTEPAD.EXE
       notepad: {
         title: '📝 NotePad.exe',

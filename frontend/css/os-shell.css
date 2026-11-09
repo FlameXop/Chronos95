@@ -299,44 +299,133 @@
   cursor: pointer;
 }
 
-/* BYTE ASSISTANT WIDGET */
+/* MULTI-TAB BROWSER BAR */
+.browser-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 2px solid #808080;
+  padding-bottom: 2px;
+  margin-bottom: 4px;
+  overflow-x: auto;
+}
+.browser-tab {
+  background: #b0b0b0;
+  border-top: 2px solid #eee;
+  border-left: 2px solid #eee;
+  border-right: 2px solid #444;
+  padding: 2px 6px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  max-width: 115px;
+  white-space: nowrap;
+}
+.browser-tab.active {
+  background: #dfdfdf;
+  font-weight: bold;
+  border-bottom: 2px solid #dfdfdf;
+}
+.tab-close {
+  font-size: 9px;
+  color: #600;
+  padding: 0 2px;
+}
+.tab-add-btn {
+  padding: 1px 6px;
+  font-weight: bold;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* EXPANDABLE ANDROID-STYLE BYTE CHAT BUBBLE */
 .byte-box {
   position: absolute;
-  bottom: 38px;
+  bottom: 36px;
   right: 10px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  width: 225px;
-  z-index: 90;
+  z-index: 95;
 }
 .byte-bubble {
+  width: 225px;
   background: #ffffd8;
   border: 2px solid #000;
-  border-radius: 6px;
-  padding: 7px;
+  border-radius: 8px;
+  padding: 6px;
   font-size: 11px;
   color: #000;
   margin-bottom: 4px;
-  box-shadow: 3px 3px 0 rgba(0,0,0,0.4);
-}
-.byte-input-row {
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.45);
   display: flex;
-  gap: 3px;
-  margin-top: 5px;
+  flex-direction: column;
+  transition: width 0.2s ease, height 0.2s ease;
 }
-.byte-input-row input {
-  flex: 1;
+/* Dynamically expands when user types or chats! */
+.byte-bubble.expanded {
+  width: 295px;
+  background: #ffffff;
+}
+.byte-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #000080;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
   font-size: 10px;
-  padding: 2px 4px;
-  border: 1px inset #888;
+  font-weight: bold;
+  margin-bottom: 5px;
 }
-.byte-avatar {
-  font-size: 28px;
+.byte-close-btn {
+  background: #c0c0c0;
+  border: 1px outset #fff;
+  color: #000;
+  font-size: 9px;
+  width: 14px;
+  height: 14px;
   cursor: pointer;
-  filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.5));
+  line-height: 1;
 }
-
+.byte-history {
+  max-height: 75px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px;
+}
+.byte-bubble.expanded .byte-history {
+  max-height: 175px;
+}
+.byte-msg {
+  padding: 4px 6px;
+  border-radius: 5px;
+  line-height: 1.35;
+  word-wrap: break-word;
+}
+.byte-msg.bot {
+  background: #fff9c4;
+  border: 1px solid #d4c870;
+  align-self: flex-start;
+}
+.byte-msg.user {
+  background: #dceeff;
+  border: 1px solid #90b8e0;
+  align-self: flex-end;
+}
+.led-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 7px;
+  color: #222;
+  font-weight: bold;
+}
 /* TASKBAR & SYSTEM TRAY POPUPS */
 .taskbar {
   height: 30px;

@@ -65,7 +65,7 @@
               </div>
             </div>
 
-            <!-- STAGE 3: RUNNING OS DESKTOP -->
+          <!-- STAGE 3: RUNNING OS DESKTOP -->
             <div id="os-desktop" class="theme-teal hidden">
               
               <!-- Desktop Shortcut Icons -->
@@ -79,16 +79,22 @@
               <!-- DYNAMIC APP WINDOWS CONTAINER -->
               <div id="window-layer"></div>
 
-              <!-- "Byte" Retro Cyber Assistant (Copyright-Safe!) -->
+              <!-- "Byte" Expandable Android-Style Chat Bubble -->
               <div id="byte-widget" class="byte-box">
                 <div class="byte-bubble" id="byte-bubble">
-                  <div id="byte-text">Beep boop! I'm <b>Byte</b>, your desktop AI co-processor. Need help in Explorer, Paint, or NotePad?</div>
+                  <div class="byte-header">
+                    <span>🤖 Byte AI Assistant</span>
+                    <button id="byte-close" class="byte-close-btn" title="Close">✕</button>
+                  </div>
+                  <div id="byte-history" class="byte-history">
+                    <div class="byte-msg bot">Hey! I'm <b>Byte</b>. I auto-hide after 5s, or type below to expand our chat!</div>
+                  </div>
                   <div class="byte-input-row">
                     <input type="text" id="byte-input" placeholder="Ask Byte anything..." />
-                    <button id="byte-send" class="win95-btn">Ask</button>
+                    <button id="byte-send" class="win95-btn">Send</button>
                   </div>
                 </div>
-                <div class="byte-avatar" id="byte-toggle" title="Click to toggle Byte bubble">🤖</div>
+                <div class="byte-avatar" id="byte-toggle" title="Click to open Byte">🤖</div>
               </div>
 
               <!-- Pop-up Start Menu -->
@@ -102,6 +108,21 @@
                   <div class="start-divider"></div>
                   <div class="start-item" id="menu-signout">🔐 Sign Out...</div>
                   <div class="start-item" id="menu-shutdown">🔌 Shut Down...</div>
+                </div>
+              </div>
+
+              <!-- Pop-up Volume Control Tray -->
+              <div id="volume-popup" class="tray-popup volume-popup hidden">
+                <div class="win-titlebar"><span>Master Volume</span></div>
+                <div class="tray-popup-body">
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <span>Volume:</span>
+                    <b id="vol-label">80%</b>
+                  </div>
+                  <input type="range" id="vol-slider" min="0" max="100" value="80" style="width:100%;margin-bottom:6px;" />
+                  <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+                    <input type="checkbox" id="vol-mute" /> Mute All OS Sounds
+                  </label>
                 </div>
               </div>
 
@@ -131,7 +152,7 @@
                 <div id="taskbar-tabs" class="taskbar-tabs"></div>
                 <div class="system-tray">
                   <span id="tray-wifi" class="tray-icon" title="Network Connection">📶</span>
-                  <span id="tray-sound" class="tray-icon" title="Audio Synthesizer Active">🔊</span>
+                  <span id="tray-sound" class="tray-icon" title="Master Volume">🔊</span>
                   <span id="taskbar-clock" class="tray-clock" title="Click for Calendar">12:00:00 PM</span>
                 </div>
               </div>
@@ -295,9 +316,9 @@
 
         <div class="kb-numpad">
           <div class="numpad-leds">
-            <span class="kb-led on"></span>
-            <span class="kb-led"></span>
-            <span class="kb-led"></span>
+            <div class="led-item"><span id="led-num" class="kb-led on"></span><small>NUM</small></div>
+            <div class="led-item"><span id="led-caps" class="kb-led"></span><small>CAPS</small></div>
+            <div class="led-item"><span id="led-scroll" class="kb-led"></span><small>SCR</small></div>
           </div>
           <div class="key-row">
             <div class="key" data-code="NumLock">NUM</div>

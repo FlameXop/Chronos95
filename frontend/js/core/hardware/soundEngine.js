@@ -1,4 +1,5 @@
-// Pure Web Audio API Synthesizer (Zero copyrighted audio files!)
+import { store } from '../store.js';
+
 class SoundEngine {
   constructor() {
     this.ctx = null;
@@ -14,16 +15,24 @@ class SoundEngine {
     }
   }
 
-  // 1. Classic 1995 MotherBoard POST single beep
+  getEffectiveGain(baseGain) {
+    const { volume, muted } = store.getState();
+    if (muted || volume <= 0) return 0;
+    return baseGain * volume;
+  }
+
   playBiosBeep() {
+    const level = this.getEffectiveGain(0.1);
+    if (level <= 0) return;
     this.init();
+
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'square';
     osc.frequency.setValueAtTime(950, this.ctx.currentTime);
 
-    gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.18);
+    gain.gain.setValueAtTime(level, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.18);
 
     osc.connect(gain);
     gain.connect(this.ctx.destination);
@@ -31,10 +40,12 @@ class SoundEngine {
     osc.stop(this.ctx.currentTime + 0.18);
   }
 
-  // 2. Warm 90s Ambient OS Startup Chord (Plays when Desktop appears)
   playStartupChime() {
+    const level = this.getEffectiveGain(0.07);
+    if (level <= 0) return;
     this.init();
-    const notes = [261.63, 329.63, 392.00, 493.88, 587.33]; // Cmaj9 dreamy chord
+
+    const notes = [261.63, 329.63, 392.00, 493.88, 587.33];
     notes.forEach((freq, index) => {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
@@ -42,8 +53,8 @@ class SoundEngine {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, this.ctx.currentTime + index * 0.08);
 
-      gain.gain.setValueAtTime(0.001, this.ctx.currentTime + index * 0.08);
-      gain.gain.linearRampToValueAtTime(0.06, this.ctx.currentTime + index * 0.08 + 0.2);
+      gain.gain.setValueAtTime(0.0001, this.ctx.currentTime + index * 0.08);
+      gain.gain.linearRampToValueAtTime(level, this.ctx.currentTime + index * 0.08 + 0.2);
       gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 2.8);
 
       osc.connect(gain);
@@ -53,17 +64,18 @@ class SoundEngine {
     });
   }
 
-  // 3. Subtle Mechanical Keyboard Clack
   playKeyClick() {
-    if (!this.ctx) return;
+    const level = this.getEffectiveGain(0.045);
+    if (!this.ctx || level <= 0) return;
+
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(180, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.025);
 
-    gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.025);
+    gain.gain.setValueAtTime(level, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.0001, this.ctx.currentTime + 0.025);
 
     osc.connect(gain);
     gain.connect(this.ctx.destination);
