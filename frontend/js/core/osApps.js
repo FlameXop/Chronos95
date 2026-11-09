@@ -145,6 +145,10 @@ class OSWindowManager {
             <hr style="margin:6px 0;" />
             <p>✨ <b>How to use:</b> Type any topic, question, or fake URL in the address bar and hit <b>Go</b>, or click <b>[+]</b> above to open a new tab!</p>
           `;
+            const newTabHTML = `
+            <h2 class="retro-page-title">Type in address bar to search </h2>
+             
+          `;
 
           let tabs = [
             { id: 1, title: 'welcome.com', url: 'http://welcome.com', content: defaultWelcomeHTML }
@@ -181,12 +185,12 @@ class OSWindowManager {
             addBtn.textContent = '+';
             addBtn.title = 'New Tab';
             addBtn.addEventListener('click', () => {
-              const newTab = {
-                id: nextTabId++,
-                title: 'welcome.com',
-                url: '',
-                content: defaultWelcomeHTML
-              };
+            const newTab = {
+              id: nextTabId++,
+              title: 'New Tab',   // <-- Changed from 'welcome.com' to 'New Tab'!
+              url: '',
+              content: newTabHTML
+            };
               tabs.push(newTab);
               activeTabId = newTab.id;
               renderTabs();
