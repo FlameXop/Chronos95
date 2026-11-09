@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chronos 95 - Neural Desktop</title>
+  <title>Chronos 95 - Neural OS Workstation</title>
   <link rel="stylesheet" href="css/hardware.css" />
   <link rel="stylesheet" href="css/os-shell.css" />
 </head>
@@ -24,8 +24,8 @@
               <div>
                 <div class="bios-header">CHRONOS MODULAR BIOS v4.50PG, An Energy Star Ally</div>
                 <div class="bios-line">Copyright (C) 1995-2026, Chronos Systems Inc.</div>
-                <div class="bios-line">CPU : INTEL PENTIUM-S 133MHz + NEURAL CO-PROCESSOR</div>
-                <div class="bios-line" id="bios-mem">Memory Test : 65536K OK</div>
+                <div class="bios-line">CPU : PENTIUM-S 133MHz + NEURAL CO-PROCESSOR</div>
+                <div class="bios-line">Memory Test : 65536K OK</div>
                 <br />
                 <div class="bios-line">Detecting Primary Master ... QUANTUM FIREBALL 1.2GB</div>
                 <div class="bios-line">Detecting Neural API Bridge ... READY</div>
@@ -38,44 +38,111 @@
             <!-- STAGE 2: CSS CLOUD SPLASH SCREEN -->
             <div id="splash-screen" class="splash-screen hidden">
               <div class="splash-center">
-                <div class="splash-logo-flag">🪟</div>
+                <div class="splash-logo-flag">🌐</div>
                 <div class="splash-title">Chronos <span>95</span></div>
-                <div class="splash-subtitle">Neural Workstation Edition</div>
+                <div class="splash-subtitle">Neural Workstation OS</div>
               </div>
               <div class="splash-loading-bar"></div>
             </div>
 
+            <!-- STAGE 2.5: SIGN-IN / LOCK SCREEN -->
+            <div id="login-screen" class="login-screen hidden">
+              <div class="win95-dialog login-box">
+                <div class="win-titlebar">
+                  <span>Welcome to Chronos 95</span>
+                </div>
+                <div class="login-body">
+                  <div class="login-icon">🔑</div>
+                  <div class="login-fields">
+                    <p>Type a user name and password to log on to Chronos 95.</p>
+                    <label>User name: <input type="text" id="login-user" value="Admin" /></label>
+                    <label>Password: <input type="password" value="********" /></label>
+                  </div>
+                  <div class="login-actions">
+                    <button id="login-btn" class="win95-btn">OK</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- STAGE 3: RUNNING OS DESKTOP -->
-            <div id="os-desktop" class="hidden">
+            <div id="os-desktop" class="theme-teal hidden">
+              
+              <!-- Desktop Shortcut Icons -->
               <div class="desktop-icons">
-                <div class="icon" id="icon-notepad">📝<span>NotePad.exe</span></div>
-                <div class="icon" id="icon-paint">🎨<span>PixelPaint.exe</span></div>
+                <div class="icon" data-open="explorer">🌍<span>Chronos Explorer</span></div>
+                <div class="icon" data-open="notepad">📝<span>NotePad.exe</span></div>
+                <div class="icon" data-open="paint">🎨<span>PixelPaint.exe</span></div>
+                <div class="icon" data-open="settings">⚙️<span>Personalize</span></div>
               </div>
 
-              <!-- Chippy Assistant -->
-              <div id="chippy-widget" class="chippy-box">
-                <div class="chippy-bubble" id="chippy-text">
-                  Hey! I'm <b>Chippy</b>. Click Start or open NotePad / PixelPaint!
+              <!-- DYNAMIC APP WINDOWS CONTAINER -->
+              <div id="window-layer"></div>
+
+              <!-- "Byte" Retro Cyber Assistant (Copyright-Safe!) -->
+              <div id="byte-widget" class="byte-box">
+                <div class="byte-bubble" id="byte-bubble">
+                  <div id="byte-text">Beep boop! I'm <b>Byte</b>, your desktop AI co-processor. Need help in Explorer, Paint, or NotePad?</div>
+                  <div class="byte-input-row">
+                    <input type="text" id="byte-input" placeholder="Ask Byte anything..." />
+                    <button id="byte-send" class="win95-btn">Ask</button>
+                  </div>
                 </div>
-                <div class="chippy-avatar" title="Click to toggle Chippy">📎</div>
+                <div class="byte-avatar" id="byte-toggle" title="Click to toggle Byte bubble">🤖</div>
               </div>
 
               <!-- Pop-up Start Menu -->
               <div id="start-menu" class="start-menu hidden">
                 <div class="start-banner"><span>CHRONOS 95</span></div>
                 <div class="start-items">
-                  <div class="start-item" id="menu-notepad">📝 NotePad.exe</div>
-                  <div class="start-item" id="menu-paint">🎨 PixelPaint.exe</div>
-                  <div class="start-item" id="menu-chippy">📎 Ask Chippy Brain</div>
+                  <div class="start-item" data-open="explorer">🌍 Chronos Explorer (AI Web)</div>
+                  <div class="start-item" data-open="notepad">📝 NotePad.exe</div>
+                  <div class="start-item" data-open="paint">🎨 PixelPaint.exe</div>
+                  <div class="start-item" data-open="settings">⚙️ Settings & Themes</div>
                   <div class="start-divider"></div>
+                  <div class="start-item" id="menu-signout">🔐 Sign Out...</div>
                   <div class="start-item" id="menu-shutdown">🔌 Shut Down...</div>
+                </div>
+              </div>
+
+              <!-- Pop-up Wi-Fi / Network Tray -->
+              <div id="wifi-popup" class="tray-popup wifi-popup hidden">
+                <div class="win-titlebar"><span>NeuralNet Connection</span></div>
+                <div class="tray-popup-body">
+                  <p><b>Status:</b> <span id="wifi-status-text" style="color:green;">Connected (56k Neural Link)</span></p>
+                  <p><b>Signal:</b> ▰▰▰▰▰ 100%</p>
+                  <p><b>Packets:</b> 1,420 Sent / 8,910 Recv</p>
+                  <button id="wifi-toggle-btn" class="win95-btn" style="margin-top:6px;width:100%;">Disconnect</button>
+                </div>
+              </div>
+
+              <!-- Pop-up Calendar & Live Clock Tray -->
+              <div id="calendar-popup" class="tray-popup calendar-popup hidden">
+                <div class="win-titlebar"><span id="cal-month-title">Date / Time Properties</span></div>
+                <div class="tray-popup-body">
+                  <div id="cal-grid" class="cal-grid"></div>
+                  <div id="cal-full-date" class="cal-footer"></div>
                 </div>
               </div>
 
               <!-- Bottom 95 Taskbar -->
               <div class="taskbar">
                 <button id="start-btn" class="win95-btn start-btn">🏁 Start</button>
-                <div class="taskbar-clock" id="taskbar-clock">12:00 PM</div>
+                <div id="taskbar-tabs" class="taskbar-tabs"></div>
+                <div class="system-tray">
+                  <span id="tray-wifi" class="tray-icon" title="Network Connection">📶</span>
+                  <span id="tray-sound" class="tray-icon" title="Audio Synthesizer Active">🔊</span>
+                  <span id="taskbar-clock" class="tray-clock" title="Click for Calendar">12:00:00 PM</span>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- STAGE 4: SHUTTING DOWN SCREEN -->
+            <div id="shutdown-screen" class="shutdown-screen hidden">
+              <div class="shutdown-msg">
+                <p style="color:#fff;font-size:14px;margin-bottom:12px;">Chronos 95 is shutting down...</p>
+                <p class="safe-turnoff">It's now safe to turn off<br/>your computer.</p>
               </div>
             </div>
 
@@ -107,13 +174,8 @@
 
     <!-- BOTTOM ROW: FULL 104-KEY KEYBOARD + MOUSEPAD -->
     <div class="bottom-rig">
-      
-      <!-- 3. FULL-SIZE 3-SECTION MECHANICAL KEYBOARD -->
       <div class="keyboard" id="retro-keyboard">
-        
-        <!-- SECTION A: MAIN ALPHANUMERIC + FUNCTION ROW -->
         <div class="kb-main">
-          <!-- Function Row -->
           <div class="key-row func-row">
             <div class="key" data-code="Escape">ESC</div>
             <div class="f-gap"></div>
@@ -132,8 +194,6 @@
             <div class="key" data-code="F11">F11</div>
             <div class="key" data-code="F12">F12</div>
           </div>
-
-          <!-- Number Row -->
           <div class="key-row">
             <div class="key" data-code="Backquote">`</div>
             <div class="key" data-code="Digit1">1</div>
@@ -150,8 +210,6 @@
             <div class="key" data-code="Equal">=</div>
             <div class="key w-back" data-code="Backspace">BKSP</div>
           </div>
-
-          <!-- QWERTY Row -->
           <div class="key-row">
             <div class="key w-tab" data-code="Tab">TAB</div>
             <div class="key" data-code="KeyQ">Q</div>
@@ -168,8 +226,6 @@
             <div class="key" data-code="BracketRight">]</div>
             <div class="key w-slash" data-code="Backslash">\</div>
           </div>
-
-          <!-- Home Row -->
           <div class="key-row">
             <div class="key w-caps" data-code="CapsLock">CAPS</div>
             <div class="key" data-code="KeyA">A</div>
@@ -185,8 +241,6 @@
             <div class="key" data-code="Quote">'</div>
             <div class="key w-enter" data-code="Enter">ENTER</div>
           </div>
-
-          <!-- Shift Row -->
           <div class="key-row">
             <div class="key w-shift" data-code="ShiftLeft">SHIFT</div>
             <div class="key" data-code="KeyZ">Z</div>
@@ -201,8 +255,6 @@
             <div class="key" data-code="Slash">/</div>
             <div class="key w-shift" data-code="ShiftRight">SHIFT</div>
           </div>
-
-          <!-- Bottom Modifiers + Spacebar -->
           <div class="key-row">
             <div class="key w-mod" data-code="ControlLeft">CTRL</div>
             <div class="key w-mod" data-code="MetaLeft">WIN</div>
@@ -214,7 +266,6 @@
           </div>
         </div>
 
-        <!-- SECTION B: NAVIGATION & ARROW KEYS -->
         <div class="kb-nav">
           <div class="key-row func-row">
             <div class="key" data-code="PrintScreen">PRT</div>
@@ -242,7 +293,6 @@
           </div>
         </div>
 
-        <!-- SECTION C: RIGHT-SIDE NUMPAD -->
         <div class="kb-numpad">
           <div class="numpad-leds">
             <span class="kb-led on"></span>
@@ -277,10 +327,8 @@
             <div class="key w-num0" data-code="Numpad0">0</div>
           </div>
         </div>
-
       </div>
 
-      <!-- 4. MOUSEPAD & RETRO MOUSE -->
       <div class="mousepad" id="mousepad">
         <div class="retro-mouse" id="retro-mouse">
           <div class="mouse-buttons">
@@ -289,11 +337,11 @@
           </div>
         </div>
       </div>
-
     </div>
 
   </div>
 
+  <!-- Using your exact path js/core/main.js -->
   <script type="module" src="js/core/main.js"></script>
 </body>
 </html>

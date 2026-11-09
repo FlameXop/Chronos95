@@ -1,4 +1,5 @@
 /* CRT Power-On Horizontal Line Expand Effect */
+/* CRT Power-On & Power-Off Animations */
 @keyframes crtTurnOn {
   0% { transform: scale(0.01, 0.005); filter: brightness(10); }
   45% { transform: scale(1, 0.005); filter: brightness(5); }
@@ -9,7 +10,7 @@
   animation: crtTurnOn 0.45s cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
-/* STAGE 1: BIOS POST SCREEN */
+/* BIOS & SPLASH SCREENS */
 .bios-screen {
   width: 100%;
   height: 100%;
@@ -17,35 +18,22 @@
   color: #ccc;
   padding: 18px;
   font-family: 'Courier New', monospace;
-  font-size: 13px;
+  font-size: 12px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
-
-.bios-header {
-  color: #00ff66;
-  font-weight: bold;
-  margin-bottom: 10px;
-}
-
-.bios-line {
-  margin: 4px 0;
-}
-
+.bios-header { color: #00ff66; font-weight: bold; margin-bottom: 8px; }
+.bios-line { margin: 3px 0; }
 .bios-cursor {
   display: inline-block;
   width: 8px;
-  height: 14px;
+  height: 13px;
   background: #00ff66;
   animation: blink 0.5s infinite;
 }
+@keyframes blink { 50% { opacity: 0; } }
 
-@keyframes blink {
-  50% { opacity: 0; }
-}
-
-/* STAGE 2: CHRONOS 95 CLOUD SPLASH SCREEN (Pure CSS!) */
 .splash-screen {
   width: 100%;
   height: 100%;
@@ -54,62 +42,64 @@
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
-  position: relative;
-  overflow: hidden;
   font-family: Tahoma, sans-serif;
 }
-
-.splash-center {
-  margin-top: 95px;
-  text-align: center;
-  z-index: 2;
-}
-
-.splash-logo-flag {
-  font-size: 46px;
-  margin-bottom: 6px;
-  text-shadow: 3px 3px 0px rgba(0,0,0,0.3);
-}
-
-.splash-title {
-  font-size: 36px;
-  font-weight: 900;
-  color: #111;
-  letter-spacing: -1px;
-  text-shadow: 1px 1px 0px #fff;
-}
-
-.splash-title span {
-  color: #fff;
-  background: #000;
-  padding: 0 6px;
-  font-weight: normal;
-  font-size: 28px;
-}
-
-.splash-subtitle {
-  margin-top: 8px;
-  font-size: 13px;
-  font-weight: bold;
-  color: #1a2a4a;
-}
-
-/* Iconic 1995 Bottom Sliding Progress Ribbon */
+.splash-center { margin-top: 90px; text-align: center; }
+.splash-logo-flag { font-size: 44px; margin-bottom: 6px; }
+.splash-title { font-size: 34px; font-weight: 900; color: #111; text-shadow: 1px 1px 0 #fff; }
+.splash-title span { color: #fff; background: #000; padding: 0 6px; font-size: 26px; }
+.splash-subtitle { margin-top: 6px; font-size: 12px; font-weight: bold; color: #1a2a4a; }
 .splash-loading-bar {
   width: 100%;
-  height: 18px;
+  height: 16px;
   background: linear-gradient(90deg, #000080, #00bfff, #ffff00, #000080);
   background-size: 200% 100%;
   animation: ribbonSlide 1.1s linear infinite;
-  border-top: 2px solid #222;
 }
-
 @keyframes ribbonSlide {
   0% { background-position: 0% 0%; }
   100% { background-position: 200% 0%; }
 }
 
-/* STAGE 3: RUNNING CHRONOS 95 DESKTOP */
+/* LOGIN & SHUTDOWN SCREENS */
+.login-screen, .shutdown-screen {
+  width: 100%;
+  height: 100%;
+  background: #004040;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: Tahoma, sans-serif;
+}
+.shutdown-screen { background: #000; text-align: center; }
+.safe-turnoff {
+  color: #ff8c00;
+  font-size: 22px;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+}
+
+.win95-dialog {
+  background: #c0c0c0;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  border-right: 2px solid #222;
+  border-bottom: 2px solid #222;
+  width: 340px;
+  box-shadow: 4px 4px 10px rgba(0,0,0,0.5);
+}
+.login-body {
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+}
+.login-icon { font-size: 28px; }
+.login-fields { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.login-fields input { width: 100%; padding: 2px 4px; border: 2px inset #ddd; font-size: 11px; }
+
+/* DESKTOP & WALLPAPER THEMES */
 #os-desktop {
   width: 100%;
   height: 100%;
@@ -117,66 +107,345 @@
   flex-direction: column;
   justify-content: space-between;
   position: relative;
+  font-family: Tahoma, sans-serif;
+}
+#os-desktop.theme-teal { background: #008080; }
+#os-desktop.theme-matrix {
+  background: radial-gradient(circle, #062b16 0%, #020d06 100%);
+}
+#os-desktop.theme-sunset {
+  background: linear-gradient(160deg, #2b1055 0%, #7597de 50%, #ff6b6b 100%);
+}
+#os-desktop.theme-space {
+  background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
 }
 
-/* Pop-up Start Menu */
-.start-menu {
+/* WINDOW LAYER & DRAGGABLE 95 WINDOWS */
+#window-layer {
   position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   bottom: 32px;
-  left: 2px;
-  width: 195px;
+  pointer-events: none;
+}
+
+.os-window {
+  position: absolute;
   background: #c0c0c0;
   border-top: 2px solid #fff;
   border-left: 2px solid #fff;
   border-right: 2px solid #222;
   border-bottom: 2px solid #222;
   display: flex;
-  z-index: 100;
-  box-shadow: 3px 3px 6px rgba(0,0,0,0.4);
+  flex-direction: column;
+  pointer-events: auto;
+  box-shadow: 4px 4px 12px rgba(0,0,0,0.45);
 }
 
+.win-titlebar {
+  background: linear-gradient(90deg, #000080, #1084d0);
+  color: #fff;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: bold;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: grab;
+}
+
+.win-controls { display: flex; gap: 2px; }
+.win-ctrl-btn {
+  width: 16px;
+  height: 14px;
+  background: #c0c0c0;
+  border-top: 1px solid #fff;
+  border-left: 1px solid #fff;
+  border-right: 1px solid #222;
+  border-bottom: 1px solid #222;
+  font-size: 9px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.win-menubar {
+  display: flex;
+  gap: 10px;
+  padding: 2px 6px;
+  font-size: 11px;
+  border-bottom: 1px solid #888;
+  background: #c0c0c0;
+}
+.win-body {
+  flex: 1;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #000;
+}
+
+/* APP 1: CHRONOS EXPLORER (AI BROWSER) */
+.browser-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  align-items: center;
+  font-size: 11px;
+}
+.browser-bar input {
+  flex: 1;
+  padding: 3px 5px;
+  border: 2px inset #ccc;
+  font-size: 11px;
+}
+.browser-viewport {
+  flex: 1;
+  background: #fff;
+  border: 2px inset #888;
+  padding: 10px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.45;
+  user-select: text;
+}
+.retro-page-title {
+  color: #000080;
+  border-bottom: 2px solid #000080;
+  padding-bottom: 4px;
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+
+/* APP 2: NOTEPAD */
+.notepad-area {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: 2px inset #888;
+  padding: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  user-select: text;
+}
+
+/* APP 3: PIXELPAINT (TOOLS + CANVAS + COLOR/HEX/SLIDER) */
+.paint-layout {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  overflow: hidden;
+}
+.paint-sidebar {
+  width: 68px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.paint-tools-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+.paint-tool-btn {
+  height: 24px;
+  background: #c0c0c0;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  border-right: 2px solid #333;
+  border-bottom: 2px solid #333;
+  font-size: 12px;
+  cursor: pointer;
+}
+.paint-tool-btn.active {
+  background: #e0e0e0;
+  border-top: 2px solid #333;
+  border-left: 2px solid #333;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+}
+.paint-canvas-wrap {
+  flex: 1;
+  background: #808080;
+  border: 2px inset #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+#paint-canvas {
+  background: #ffffff;
+  cursor: crosshair;
+}
+.paint-bottombar {
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  background: #b8b8b8;
+  padding: 3px 5px;
+  border: 1px inset #ddd;
+}
+.swatch-row { display: flex; gap: 2px; }
+.swatch {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #222;
+  cursor: pointer;
+}
+
+/* BYTE ASSISTANT WIDGET */
+.byte-box {
+  position: absolute;
+  bottom: 38px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 225px;
+  z-index: 90;
+}
+.byte-bubble {
+  background: #ffffd8;
+  border: 2px solid #000;
+  border-radius: 6px;
+  padding: 7px;
+  font-size: 11px;
+  color: #000;
+  margin-bottom: 4px;
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.4);
+}
+.byte-input-row {
+  display: flex;
+  gap: 3px;
+  margin-top: 5px;
+}
+.byte-input-row input {
+  flex: 1;
+  font-size: 10px;
+  padding: 2px 4px;
+  border: 1px inset #888;
+}
+.byte-avatar {
+  font-size: 28px;
+  cursor: pointer;
+  filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.5));
+}
+
+/* TASKBAR & SYSTEM TRAY POPUPS */
+.taskbar {
+  height: 30px;
+  background: #c0c0c0;
+  border-top: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  gap: 4px;
+  z-index: 120;
+}
+.taskbar-tabs {
+  flex: 1;
+  display: flex;
+  gap: 3px;
+  overflow: hidden;
+}
+.task-tab {
+  background: #b8b8b8;
+  border: 2px inset #eee;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.system-tray {
+  border: 2px inset #ddd;
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.tray-icon, .tray-clock { cursor: pointer; }
+
+.tray-popup {
+  position: absolute;
+  bottom: 32px;
+  right: 4px;
+  width: 215px;
+  background: #c0c0c0;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  border-right: 2px solid #222;
+  border-bottom: 2px solid #222;
+  z-index: 115;
+  box-shadow: 3px 3px 8px rgba(0,0,0,0.5);
+  color: #000;
+  font-size: 11px;
+}
+.tray-popup-body { padding: 8px; }
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+  margin-bottom: 6px;
+  background: #fff;
+  border: 1px inset #888;
+  padding: 4px;
+}
+.cal-day-head { font-weight: bold; color: #000080; font-size: 9px; }
+.cal-day { padding: 2px; font-size: 10px; }
+.cal-day.today { background: #000080; color: #fff; font-weight: bold; }
+.cal-footer { text-align: center; font-weight: bold; color: #333; font-size: 10px; }
+
+/* START MENU */
+.start-menu {
+  position: absolute;
+  bottom: 30px;
+  left: 2px;
+  width: 205px;
+  background: #c0c0c0;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  border-right: 2px solid #222;
+  border-bottom: 2px solid #222;
+  display: flex;
+  z-index: 125;
+  box-shadow: 3px 3px 6px rgba(0,0,0,0.4);
+}
 .start-banner {
-  width: 26px;
+  width: 24px;
   background: linear-gradient(180deg, #000080, #1084d0);
   color: #fff;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 10px;
+  padding-bottom: 8px;
 }
-
 .start-banner span {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   font-weight: bold;
-  font-size: 14px;
-  letter-spacing: 1px;
+  font-size: 13px;
 }
-
-.start-items {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 2px;
-}
-
+.start-items { flex: 1; display: flex; flex-direction: column; padding: 2px; }
 .start-item {
-  padding: 7px 10px;
-  font-size: 12px;
+  padding: 6px 8px;
+  font-size: 11px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   color: #000;
 }
-
-.start-item:hover {
-  background: #000080;
-  color: #fff;
-}
-
-.start-divider {
-  border-top: 1px solid #808080;
-  border-bottom: 1px solid #fff;
-  margin: 3px 0;
-}
+.start-item:hover { background: #000080; color: #fff; }
+.start-divider { border-top: 1px solid #808080; border-bottom: 1px solid #fff; margin: 3px 0; }
