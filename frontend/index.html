@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chronos 95 - Neural Desktop</title>
+  <link rel="stylesheet" href="css/hardware.css" />
+</head>
+<body>
+
+  <!-- THE FULL COMPUTER DESK SCENE -->
+  <div class="desk-container">
+
+    <!-- TOP ROW: CRT MONITOR + PC CASE -->
+    <div class="top-rig">
+      
+      <!-- 1. CRT MONITOR -->
+      <div class="crt-monitor">
+        <div class="crt-bezel">
+          <!-- THE ACTUAL SCREEN (Starts OFF/Black) -->
+          <div id="crt-screen" class="crt-screen state-off">
+            
+            <!-- Boot Screen Overlay -->
+            <div id="boot-screen" class="hidden">
+              <p>CHRONOS BIOS v1.95 (C) 1995-2026</p>
+              <p>Memory Test: 640K OK</p>
+              <p>Initializing Neural Co-Processor...</p>
+              <div class="boot-loader">Starting Chronos 95...</div>
+            </div>
+
+            <!-- The OS Desktop (Revealed when RUNNING) -->
+            <div id="os-desktop" class="hidden">
+              <div class="desktop-icons">
+                <div class="icon" id="icon-notepad">📝<span>NotePad.exe</span></div>
+                <div class="icon" id="icon-paint">🎨<span>PixelPaint.exe</span></div>
+              </div>
+
+              <!-- Chippy Assistant -->
+              <div id="chippy-widget" class="chippy-box">
+                <div class="chippy-bubble">
+                  Hey! I'm <b>Chippy</b>. Click Start or open an app—I'm connected to the AI Brain!
+                </div>
+                <div class="chippy-avatar">📎</div>
+              </div>
+
+              <!-- Bottom 95 Taskbar -->
+              <div class="taskbar">
+                <button id="start-btn" class="win95-btn start-btn">🏁 Start</button>
+                <div class="taskbar-clock" id="taskbar-clock">12:00 PM</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+        <div class="monitor-brand">CHRONOS SYNCMASTER 15"</div>
+      </div>
+
+      <!-- 2. PC TOWER ON THE RIGHT -->
+      <div class="pc-tower">
+        <div class="drive-bay">
+          <div class="cd-slot"></div>
+          <div class="eject-btn"></div>
+        </div>
+        <div class="drive-bay floppy">
+          <div class="floppy-slot"></div>
+        </div>
+        
+        <div class="tower-controls">
+          <div class="led-group">
+            <span id="power-led" class="led off"></span>
+            <span class="led-label">PWR</span>
+          </div>
+          <!-- PHYSICAL POWER BUTTON -->
+          <button id="power-btn" class="power-btn" title="Press to Boot PC">⏻</button>
+        </div>
+        <div class="tower-vents"></div>
+      </div>
+
+    </div>
+
+    <!-- BOTTOM ROW: KEYBOARD + MOUSE ON MAT -->
+    <div class="bottom-rig">
+      
+      <!-- 3. RETRO KEYBOARD -->
+      <div class="keyboard" id="retro-keyboard">
+        <div class="key-row">
+          <div class="key" data-key="q">Q</div>
+          <div class="key" data-key="w">W</div>
+          <div class="key" data-key="e">E</div>
+          <div class="key" data-key="r">R</div>
+          <div class="key" data-key="t">T</div>
+          <div class="key" data-key="y">Y</div>
+          <div class="key" data-key="u">U</div>
+          <div class="key" data-key="i">I</div>
+          <div class="key" data-key="o">O</div>
+          <div class="key" data-key="p">P</div>
+        </div>
+        <div class="key-row">
+          <div class="key" data-key="a">A</div>
+          <div class="key" data-key="s">S</div>
+          <div class="key" data-key="d">D</div>
+          <div class="key" data-key="f">F</div>
+          <div class="key" data-key="g">G</div>
+          <div class="key" data-key="h">H</div>
+          <div class="key" data-key="j">J</div>
+          <div class="key" data-key="k">K</div>
+          <div class="key" data-key="l">L</div>
+        </div>
+        <div class="key-row">
+          <div class="key space-key" data-key=" ">SPACE</div>
+        </div>
+      </div>
+
+      <!-- 4. MOUSEPAD & MOVING RETRO MOUSE -->
+      <div class="mousepad" id="mousepad">
+        <div class="retro-mouse" id="retro-mouse">
+          <div class="mouse-buttons">
+            <div class="m-btn left" id="mouse-left"></div>
+            <div class="m-btn right" id="mouse-right"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Connect our modular JS Entry File -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
