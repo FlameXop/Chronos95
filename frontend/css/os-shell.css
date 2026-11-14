@@ -538,3 +538,167 @@
 }
 .start-item:hover { background: #000080; color: #fff; }
 .start-divider { border-top: 1px solid #808080; border-bottom: 1px solid #fff; margin: 3px 0; }
+/* RICH WEBPAGE RENDERING INSIDE CHRONOS EXPLORER */
+.web-article {
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #111;
+}
+.web-hero {
+  background: linear-gradient(135deg, #000080, #1084d0);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  font-family: Tahoma, sans-serif;
+}
+.web-hero h1, .web-article h1, .web-article h2 {
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+.web-hero p {
+  font-size: 11px;
+  opacity: 0.92;
+}
+.web-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 8px 0;
+}
+.web-card {
+  background: #f4f6fb;
+  border: 1px solid #b0c4de;
+  border-top: 3px solid #000080;
+  padding: 8px;
+  font-family: Tahoma, sans-serif;
+  font-size: 11px;
+}
+.web-card h3 {
+  font-size: 12px;
+  color: #000080;
+  margin-bottom: 4px;
+}
+.web-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-family: Tahoma, sans-serif;
+  font-size: 11px;
+}
+.web-table th, .web-table td {
+  border: 1px solid #888;
+  padding: 4px 6px;
+  text-align: left;
+}
+.web-table th {
+  background: #d4e0f5;
+  color: #000080;
+}
+.browser-viewport a {
+  color: #0000ee;
+  text-decoration: underline;
+  font-weight: bold;
+  cursor: pointer;
+}
+.browser-viewport a:hover {
+  color: #ff0000;
+}
+
+/* GENERATIVE AI BYTE CHAT UPGRADES */
+.byte-msg code {
+  background: #222;
+  color: #00ff66;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+}
+.byte-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.byte-chip {
+  background: #e8f0fe;
+  border: 1px solid #000080;
+  color: #000080;
+  font-size: 9px;
+  padding: 2px 5px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.byte-chip:hover {
+  background: #000080;
+  color: #fff;
+}
+/* WINDOW MAXIMIZE, MINIMIZE & RESIZE HANDLE */
+.os-window.minimized {
+  display: none !important;
+}
+
+.os-window.maximized {
+  left: 0 !important;
+  top: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.win-resize-handle {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  color: #555;
+  user-select: none;
+}
+
+.task-tab.active-tab {
+  background: #dfdfdf;
+  border: 2px inset #fff;
+  font-weight: bold;
+}
+/* 8-DIRECTIONAL WINDOW RESIZE HANDLES (TOP, BOTTOM, LEFT, RIGHT & 4 CORNERS) */
+.os-window {
+  min-width: 260px;
+  min-height: 170px;
+}
+.win-body {
+  min-height: 0;
+  min-width: 0;
+}
+.rz-handle {
+  position: absolute;
+  z-index: 25;
+  user-select: none;
+}
+.rz-n  { top: -4px; left: 8px; right: 8px; height: 7px; cursor: ns-resize; }
+.rz-s  { bottom: -4px; left: 8px; right: 8px; height: 7px; cursor: ns-resize; }
+.rz-e  { top: 8px; right: -4px; bottom: 8px; width: 7px; cursor: ew-resize; }
+.rz-w  { top: 8px; left: -4px; bottom: 8px; width: 7px; cursor: ew-resize; }
+.rz-nw { top: -4px; left: -4px; width: 12px; height: 12px; cursor: nwse-resize; }
+.rz-ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: nesw-resize; }
+.rz-sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: nesw-resize; }
+.rz-se {
+  bottom: 0; right: 0; width: 16px; height: 16px;
+  cursor: nwse-resize; font-size: 10px; line-height: 16px;
+  text-align: center; color: #333;
+}
+
+/* Compact Boot Greeting Mode vs Full Chat Log Mode */
+.byte-greeting-only {
+  font-size: 11px;
+  padding: 4px;
+  color: #111;
+}
+.byte-bubble:not(.expanded) .byte-history {
+  display: none;
+}
+.byte-bubble.expanded .byte-greeting-only {
+  display: none;
+}

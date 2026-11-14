@@ -1,35 +1,43 @@
-// Modular Window Manager + All 4 OS Apps (Explorer, NotePad, PixelPaint, Settings)
+// Automatically works on localhost:5500 -> localhost:8000 AND on a single deployed cloud URL!
+const API_BASE = (window.location.port === '8000' || window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+  ? ''
+  : 'http://localhost:8000';
+
 class OSWindowManager {
   constructor() {
     this.zIndexCounter = 10;
     this.openWindows = {};
+    this.lastBrowserText = '';
+    this.lastBrowserTitle = '';
   }
 
   init() {
     this.windowLayer = document.getElementById('window-layer');
     this.taskbarTabs = document.getElementById('taskbar-tabs');
 
-    // Load saved theme from localStorage
     const savedTheme = localStorage.getItem('chronos_theme') || 'theme-teal';
     this.applyTheme(savedTheme);
   }
 
   applyTheme(themeClass) {
     const desktop = document.getElementById('os-desktop');
+    if (!desktop) return;
     desktop.classList.remove('theme-teal', 'theme-matrix', 'theme-sunset', 'theme-space');
     desktop.classList.add(themeClass);
     localStorage.setItem('chronos_theme', themeClass);
   }
 
   openApp(appId) {
-    // If already open, bring to front
     if (this.openWindows[appId]) {
+      const winEl = this.openWindows[appId];
+      winEl.classList.remove('minimized');
       this.focusWindow(appId);
-      return;
+      this.renderTaskbarTabs();
+      return winEl;
     }
 
     const config = this.getAppConfig(appId);
-    if (!config) return;
+    if (!config) return null;
 
     const winEl = document.createElement('div');
     winEl.className = 'os-window';
@@ -43,32 +51,73 @@ class OSWindowManager {
       <div class="win-titlebar" id="title-${appId}">
         <span>${config.title}</span>
         <div class="win-controls">
-          <button class="win-ctrl-btn" data-close="${appId}">✕</button>
+          <button class="win-ctrl-btn" data-min="${appId}" title="Minimize">_</button>
+          <button class="win-ctrl-btn" data-max="${appId}" title="Maximize / Restore">□</button>
+          <button class="win-ctrl-btn" data-close="${appId}" title="Close">✕</button>
         </div>
       </div>
       <div class="win-body">${config.html}</div>
+      <!-- 8-Way Resize Handles (Top, Bottom, Left, Right + 4 Corners) -->
+      <div class="rz-handle rz-n" data-dir="n"></div>
+      <div class="rz-handle rz-s" data-dir="s"></div>
+      <div class="rz-handle rz-e" data-dir="e"></div>
+      <div class="rz-handle rz-w" data-dir="w"></div>
+      <div class="rz-handle rz-nw" data-dir="nw"></div>
+      <div class="rz-handle rz-ne" data-dir="ne"></div>
+      <div class="rz-handle rz-sw" data-dir="sw"></div>
+      <div class="rz-handle rz-se" data-dir="se" title="Drag any edge or corner to resize">◢</div>
     `;
 
     this.windowLayer.appendChild(winEl);
     this.openWindows[appId] = winEl;
 
-    // Make Window Draggable & Focusable
-    this.makeDraggable(winEl, winEl.querySelector('.win-titlebar'), appId);
+    const titlebar = winEl.querySelector('.win-titlebar');
+    this.makeDraggable(winEl, titlebar, appId);
+    this.makeResizable(winEl, appId);
+    titlebar.addEventListener('dblclick', () => this.toggleMaximize(appId));
     winEl.addEventListener('mousedown', () => this.focusWindow(appId));
 
-    // Close Button
-    winEl.querySelector(`[data-close="${appId}"]`).addEventListener('click', () => {
+    winEl.querySelector(`[data-min="${appId}"]`).addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.minimizeApp(appId);
+    });
+    winEl.querySelector(`[data-max="${appId}"]`).addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleMaximize(appId);
+    });
+    winEl.querySelector(`[data-close="${appId}"]`).addEventListener('click', (e) => {
+      e.stopPropagation();
       this.closeApp(appId);
     });
 
-    // Mount App-Specific Logic
     config.onMount(winEl);
     this.renderTaskbarTabs();
+    return winEl;
   }
 
   focusWindow(appId) {
     const winEl = this.openWindows[appId];
-    if (winEl) winEl.style.zIndex = ++this.zIndexCounter;
+    if (winEl) {
+      winEl.classList.remove('minimized');
+      winEl.style.zIndex = ++this.zIndexCounter;
+      this.renderTaskbarTabs();
+    }
+  }
+
+  minimizeApp(appId) {
+    const winEl = this.openWindows[appId];
+    if (winEl) {
+      winEl.classList.add('minimized');
+      this.renderTaskbarTabs();
+    }
+  }
+
+  toggleMaximize(appId) {
+    const winEl = this.openWindows[appId];
+    if (!winEl) return;
+    winEl.classList.remove('minimized');
+    winEl.classList.toggle('maximized');
+    this.focusWindow(appId);
   }
 
   closeApp(appId) {
@@ -77,20 +126,71 @@ class OSWindowManager {
       winEl.remove();
       delete this.openWindows[appId];
       this.renderTaskbarTabs();
+      return true;
     }
+    return false;
   }
 
   closeAll() {
     Object.keys(this.openWindows).forEach((id) => this.closeApp(id));
   }
 
+  getBrowserText() {
+    const expWin = this.openWindows['explorer'];
+    if (expWin) {
+      const view = expWin.querySelector('#exp-viewport');
+      if (view && view.innerText.trim()) {
+        return view.innerText.trim();
+      }
+    }
+    return this.lastBrowserText || '';
+  }
+
+  // FIXED: Defaults to append = true so storing multiple items adds BELOW existing content!
+  writeToNotepad(content, append = true) {
+    const npWin = this.openApp('notepad');
+    const area = npWin.querySelector('#np-text');
+    const status = npWin.querySelector('#np-status');
+    if (area) {
+      const current = area.value.trim();
+      if (append && current) {
+        area.value = `${current}\n\n────────────────────────────────\n${content}`;
+      } else {
+        area.value = content;
+      }
+      area.scrollTop = area.scrollHeight;
+      localStorage.setItem('chronos_notepad', area.value);
+      if (status) status.textContent = 'Appended & Saved ✓';
+    }
+  }
+
+  getCanvasDataUrl() {
+    const ptWin = this.openWindows['paint'];
+    if (ptWin) {
+      const canvas = ptWin.querySelector('#paint-canvas');
+      if (canvas) return canvas.toDataURL('image/png');
+    }
+    return null;
+  }
+
   renderTaskbarTabs() {
     this.taskbarTabs.innerHTML = '';
     Object.keys(this.openWindows).forEach((appId) => {
+      const winEl = this.openWindows[appId];
+      const isMin = winEl.classList.contains('minimized');
       const tab = document.createElement('div');
-      tab.className = 'task-tab';
+      tab.className = `task-tab ${!isMin ? 'active-tab' : ''}`;
       tab.textContent = this.getAppConfig(appId).title;
-      tab.addEventListener('click', () => this.focusWindow(appId));
+      tab.addEventListener('click', () => {
+        if (isMin) {
+          winEl.classList.remove('minimized');
+          this.focusWindow(appId);
+        } else if (Number(winEl.style.zIndex) === this.zIndexCounter) {
+          this.minimizeApp(appId);
+        } else {
+          this.focusWindow(appId);
+        }
+      });
       this.taskbarTabs.appendChild(tab);
     });
   }
@@ -99,7 +199,7 @@ class OSWindowManager {
     let isDragging = false, startX = 0, startY = 0, origX = 0, origY = 0;
 
     handleEl.addEventListener('mousedown', (e) => {
-      if (e.target.tagName === 'BUTTON') return;
+      if (e.target.tagName === 'BUTTON' || winEl.classList.contains('maximized')) return;
       isDragging = true;
       this.focusWindow(appId);
       startX = e.clientX;
@@ -117,19 +217,76 @@ class OSWindowManager {
     window.addEventListener('mouseup', () => { isDragging = false; });
   }
 
-  // DEFINITIONS FOR OUR 4 DESKTOP APPS
+  // FULL 8-DIRECTION RESIZE (TOP, BOTTOM, LEFT, RIGHT & CORNERS)
+  makeResizable(winEl, appId) {
+    let isResizing = false, dir = '', startX = 0, startY = 0;
+    let startW = 0, startH = 0, startL = 0, startT = 0;
+    const minW = 260, minH = 170;
+
+    winEl.querySelectorAll('.rz-handle').forEach((handle) => {
+      handle.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (winEl.classList.contains('maximized')) return;
+        isResizing = true;
+        dir = handle.dataset.dir;
+        this.focusWindow(appId);
+        startX = e.clientX;
+        startY = e.clientY;
+        startW = winEl.offsetWidth;
+        startH = winEl.offsetHeight;
+        startL = winEl.offsetLeft;
+        startT = winEl.offsetTop;
+      });
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      // East (Right)
+      if (dir.includes('e')) {
+        winEl.style.width = `${Math.max(minW, startW + dx)}px`;
+      }
+      // South (Bottom)
+      if (dir.includes('s')) {
+        winEl.style.height = `${Math.max(minH, startH + dy)}px`;
+      }
+      // West (Left — moves left edge while keeping right edge anchored!)
+      if (dir.includes('w')) {
+        const possibleW = startW - dx;
+        if (possibleW >= minW) {
+          winEl.style.width = `${possibleW}px`;
+          winEl.style.left = `${Math.max(0, startL + dx)}px`;
+        }
+      }
+      // North (Top — moves top edge while keeping bottom edge anchored!)
+      if (dir.includes('n')) {
+        const possibleH = startH - dy;
+        if (possibleH >= minH) {
+          winEl.style.height = `${possibleH}px`;
+          winEl.style.top = `${Math.max(0, startT + dy)}px`;
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', () => { isResizing = false; });
+  }
+
   getAppConfig(appId) {
     const apps = {
-     // 1. MULTI-TAB CHRONOS EXPLORER (Starts at http://welcome.com)
       explorer: {
-        title: '🌍 Chronos Explorer - [Multi-Tab AI Web]',
-        width: '505px', height: '345px', left: '70px', top: '16px',
+        title: '🌍 Chronos Explorer',
+        width: '510px', height: '340px', left: '45px', top: '12px',
         html: `
           <div class="browser-tabs-bar" id="exp-tabs-bar"></div>
           <div class="browser-bar">
+            <button id="exp-home" class="win95-btn" title="Home">🏠</button>
             <span>URL:</span>
-            <input type="text" id="exp-query" value="http://welcome.com" placeholder="Type URL or ask AI anything..." />
+            <input type="text" id="exp-query" value="http://welcome.com" placeholder="Search any topic or URL..." />
             <button id="exp-go" class="win95-btn">Go</button>
+            <button id="exp-save-np" class="win95-btn" title="Append page to NotePad">📝 +NotePad</button>
           </div>
           <div id="exp-viewport" class="browser-viewport"></div>
         `,
@@ -137,17 +294,41 @@ class OSWindowManager {
           const tabsBar = win.querySelector('#exp-tabs-bar');
           const input = win.querySelector('#exp-query');
           const goBtn = win.querySelector('#exp-go');
+          const homeBtn = win.querySelector('#exp-home');
+          const saveNpBtn = win.querySelector('#exp-save-np');
           const view = win.querySelector('#exp-viewport');
 
           const defaultWelcomeHTML = `
-            <h2 class="retro-page-title">Welcome to http://welcome.com</h2>
-            <p>You are browsing on <b>Chronos Explorer 1.0</b> with Multi-Tab Neural Rendering.</p>
-            <hr style="margin:6px 0;" />
-            <p>✨ <b>How to use:</b> Type any topic, question, or fake URL in the address bar and hit <b>Go</b>, or click <b>[+]</b> above to open a new tab!</p>
+            <div class="web-article">
+              <div class="web-hero">
+                <h1>🌐 Chronos Net Portal 1995</h1>
+                <p>The AI-Synthesized World Wide Web</p>
+              </div>
+              <div class="web-grid">
+                <div class="web-card">
+                  <h3>🚀 Trending Portals</h3>
+                  <ul style="margin-left:14px;">
+                    <li><a href="#" data-search="How Quantum Computers Work">Quantum Computing Guide</a></li>
+                    <li><a href="#" data-search="History of 90s Video Games">90s Video Game Encyclopedia</a></li>
+                    <li><a href="#" data-search="Artificial Intelligence in 2026">AI Revolution Portal</a></li>
+                  </ul>
+                </div>
+                <div class="web-card">
+                  <h3>📚 Science & Tech</h3>
+                  <ul style="margin-left:14px;">
+                    <li><a href="#" data-search="Inside a Black Hole">Inside a Black Hole</a></li>
+                    <li><a href="#" data-search="Linux vs Windows 95 Architecture">OS Architecture Comparison</a></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           `;
-            const newTabHTML = `
-            <h2 class="retro-page-title">Type in address bar to search </h2>
-             
+
+          const newTabHTML = `
+            <div style="text-align:center;margin-top:40px;font-family:Tahoma,sans-serif;">
+              <h2 style="color:#000080;margin-bottom:6px;">✨ New Neural Tab</h2>
+              <p style="color:#444;">Type any topic, question, or URL above and press <b>Enter</b>.</p>
+            </div>
           `;
 
           let tabs = [
@@ -179,47 +360,44 @@ class OSWindowManager {
               tabsBar.appendChild(tabEl);
             });
 
-            // '+' Add New Tab Button
             const addBtn = document.createElement('button');
             addBtn.className = 'win95-btn tab-add-btn';
             addBtn.textContent = '+';
-            addBtn.title = 'New Tab';
             addBtn.addEventListener('click', () => {
-            const newTab = {
-              id: nextTabId++,
-              title: 'New Tab',   // <-- Changed from 'welcome.com' to 'New Tab'!
-              url: '',
-              content: newTabHTML
-            };
+              const newTab = { id: nextTabId++, title: 'New Tab', url: '', content: newTabHTML };
               tabs.push(newTab);
               activeTabId = newTab.id;
               renderTabs();
+              input.focus();
             });
             tabsBar.appendChild(addBtn);
 
-            // Sync active tab URL & Viewport
             const current = tabs.find((item) => item.id === activeTabId);
             if (current) {
               input.value = current.url;
               view.innerHTML = current.content;
+              this.lastBrowserText = view.innerText.trim();
+              this.lastBrowserTitle = current.title;
             }
           };
 
-          const runSearch = async () => {
+          const runSearch = async (overrideQuery = null) => {
             const current = tabs.find((item) => item.id === activeTabId);
             if (!current) return;
-            const q = input.value.trim();
+            const q = (overrideQuery !== null ? overrideQuery : input.value).trim();
             if (!q) return;
 
-            current.url = q;
+            input.value = q;
+            current.url = q.startsWith('http') ? q : `http://chronos.net/${q.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
             current.title = q.replace(/^https?:\/\//, '');
+
             if (q.toLowerCase() === 'http://welcome.com' || q.toLowerCase() === 'welcome.com') {
               current.content = defaultWelcomeHTML;
               renderTabs();
               return;
             }
 
-            current.content = `<p><i>⌛ Dialing Neural Web for "${q}"...</i></p>`;
+            current.content = `<p style="padding:20px;"><i>⌛ Loading webpage for "<b>${q}</b>"...</i></p>`;
             renderTabs();
 
             const reply = await askNeuralBrain(q, 'browser');
@@ -227,53 +405,97 @@ class OSWindowManager {
             renderTabs();
           };
 
-          goBtn.addEventListener('click', runSearch);
+          win.runExplorerSearch = runSearch;
+
+          saveNpBtn.addEventListener('click', () => {
+            const text = view.innerText.trim();
+            this.writeToNotepad(`[Saved from Explorer: ${input.value}]\n${text}`, true);
+          });
+
+          view.addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+            if (link) {
+              e.preventDefault();
+              const target = link.dataset.search || link.textContent;
+              if (target) runSearch(target);
+            }
+          });
+
+          homeBtn.addEventListener('click', () => runSearch('http://welcome.com'));
+          goBtn.addEventListener('click', () => runSearch());
           input.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
           renderTabs();
         }
       },
-      // 2. PERSISTENT NOTEPAD.EXE
+
       notepad: {
         title: '📝 NotePad.exe',
-        width: '420px', height: '290px', left: '110px', top: '40px',
+        width: '435px', height: '305px', left: '95px', top: '26px',
         html: `
           <div class="win-menubar">
-            <span id="np-save" style="cursor:pointer;font-weight:bold;">💾 Save</span>
+            <span id="np-ai" style="cursor:pointer;color:#000080;font-weight:bold;">✨ Write / Enhance with Byte</span>
+            <span id="np-undo" style="cursor:pointer;">↩️ Undo</span>
             <span id="np-clear" style="cursor:pointer;">🗑️ Clear</span>
-            <span id="np-ai" style="cursor:pointer;color:#000080;font-weight:bold;">🤖 Ask Byte to Enhance</span>
-            <span id="np-status" style="margin-left:auto;color:green;font-size:10px;">Auto-Saved</span>
+            <span id="np-status" style="margin-left:auto;color:green;font-size:10px;">Saved in Memory ✓</span>
           </div>
-          <textarea id="np-text" class="notepad-area" placeholder="Type notes or code here... (Automatically saved in browser storage!)"></textarea>
+          <textarea id="np-text" class="notepad-area" placeholder="Type notes or a prompt... (Everything here persists in localStorage across reloads!)"></textarea>
         `,
         onMount: (win) => {
           const area = win.querySelector('#np-text');
           const status = win.querySelector('#np-status');
-          area.value = localStorage.getItem('chronos_notepad') || '=== CHRONOS 95 NOTES ===\n- Everything you type here stays saved even after rebooting!\n- Click "Ask Byte to Enhance" to summarize or generate code.';
+          let previousText = '';
+
+          area.value = localStorage.getItem('chronos_notepad') || '';
+          previousText = area.value;
 
           area.addEventListener('input', () => {
             localStorage.setItem('chronos_notepad', area.value);
             status.textContent = 'Saved ✓';
           });
 
+          win.querySelector('#np-undo').addEventListener('click', () => {
+            if (previousText !== undefined) {
+              area.value = previousText;
+              localStorage.setItem('chronos_notepad', area.value);
+              status.textContent = 'Undone ↩️';
+            }
+          });
+
           win.querySelector('#np-clear').addEventListener('click', () => {
+            previousText = area.value;
             area.value = '';
             localStorage.setItem('chronos_notepad', '');
+            status.textContent = 'Cleared';
           });
 
           win.querySelector('#np-ai').addEventListener('click', async () => {
-            status.textContent = 'Byte thinking...';
-            const res = await askNeuralBrain(area.value, 'notepad');
-            area.value += `\n\n--- [BYTE AI OUTPUT] ---\n${res}`;
+            const fullText = area.value;
+            if (!fullText.trim()) return;
+
+            previousText = fullText;
+            const start = area.selectionStart;
+            const end = area.selectionEnd;
+            const hasSelection = start !== end;
+            const targetText = hasSelection ? fullText.slice(start, end) : fullText;
+
+            status.textContent = '⏳ Byte writing...';
+            const res = await askNeuralBrain(targetText, 'notepad');
+
+            if (hasSelection) {
+              area.value = fullText.slice(0, start) + res + fullText.slice(end);
+            } else {
+              // Append below if existing notes have multiple sections, or replace single command
+              area.value = fullText.includes('────') ? `${fullText}\n\n${res}` : res;
+            }
             localStorage.setItem('chronos_notepad', area.value);
-            status.textContent = 'Enhanced ✓';
+            status.textContent = 'Enhanced ✨';
           });
         }
       },
 
-      // 3. FULL PIXELPAINT.EXE (BRUSH, SHAPES, FILL, STROKE SLIDER, HEX PICKER)
       paint: {
         title: '🎨 PixelPaint.exe',
-        width: '510px', height: '350px', left: '85px', top: '12px',
+        width: '515px', height: '355px', left: '75px', top: '12px',
         html: `
           <div class="paint-layout">
             <div class="paint-sidebar">
@@ -286,7 +508,7 @@ class OSWindowManager {
                 <button class="paint-tool-btn" data-tool="fill" title="Fill Canvas">🪣</button>
               </div>
               <button id="pt-clear" class="win95-btn" style="font-size:10px;margin-top:4px;">Clear</button>
-              <button id="pt-ai" class="win95-btn" style="font-size:10px;margin-top:4px;color:#000080;">🤖 Inspect</button>
+              <button id="pt-ai" class="win95-btn" style="font-size:10px;margin-top:4px;color:#000080;font-weight:bold;">👁️ Ask Byte</button>
             </div>
             <div class="paint-canvas-wrap">
               <canvas id="paint-canvas" width="405" height="255"></canvas>
@@ -304,7 +526,6 @@ class OSWindowManager {
         onMount: (win) => this.mountPaintLogic(win)
       },
 
-      // 4. PERSONALIZATION SETTINGS
       settings: {
         title: '⚙️ Display & Personalization',
         width: '320px', height: '220px', left: '140px', top: '65px',
@@ -327,7 +548,6 @@ class OSWindowManager {
     return apps[appId];
   }
 
-  // FULL HTML5 CANVAS PAINT ENGINE
   mountPaintLogic(win) {
     const canvas = win.querySelector('#paint-canvas');
     const ctx = canvas.getContext('2d');
@@ -344,7 +564,6 @@ class OSWindowManager {
     const sizeInput = win.querySelector('#pt-size');
     const sizeVal = win.querySelector('#pt-size-val');
 
-    // Populate 8 Classic Color Swatches
     const colors = ['#000000', '#ffffff', '#ff0000', '#00aa00', '#000080', '#ffff00', '#ff00ff', '#00ffff'];
     const swatchRow = win.querySelector('#pt-swatches');
     colors.forEach((c) => {
@@ -431,16 +650,65 @@ class OSWindowManager {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     });
 
-    win.querySelector('#pt-ai').addEventListener('click', () => {
-      document.getElementById('byte-text').innerHTML = `🎨 <b>Byte Vision:</b> Awesome canvas! Once our FastAPI backend is running on port 8000, I'll convert your PixelPaint drawings into live HTML/CSS!`;
+    win.querySelector('#pt-ai').addEventListener('click', async () => {
+      const byteBubble = document.getElementById('byte-bubble');
+      const byteHistory = document.getElementById('byte-history') || document.getElementById('byte-text');
+      if (!byteBubble || !byteHistory) return;
+
+      byteBubble.classList.remove('hidden');
+      byteBubble.classList.add('expanded');
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const loadId = `paint-${Date.now()}`;
+      byteHistory.innerHTML += `
+        <div class="byte-msg user">
+          <b>🎨 Check out my drawing:</b><br/>
+          <img src="${dataUrl}" style="width:90px;border:1px solid #333;margin-top:3px;background:#fff;" />
+        </div>
+        <div id="${loadId}" class="byte-msg bot"><i>👁️ Byte is looking at your canvas...</i></div>
+      `;
+      byteHistory.scrollTop = byteHistory.scrollHeight;
+
+      const reply = await askPaintVision(
+        dataUrl,
+        `I am currently drawing with color ${color}. What do you see on my canvas, what colors should I use next, and how can I improve it?`
+      );
+
+      const loadEl = document.getElementById(loadId);
+      if (loadEl) {
+        loadEl.innerHTML = `<b>🎨 Byte:</b> ${formatByteMarkdown(reply)}`;
+      }
+      byteHistory.scrollTop = byteHistory.scrollHeight;
+      localStorage.setItem('chronos_byte_html', byteHistory.innerHTML);
     });
   }
 }
 
-// Smart AI Bridge (Tries Local FastAPI Backend first, falls back to built-in synthesizer so UI always works!)
-export async function askNeuralBrain(prompt, mode = 'chat') {
+export function formatByteMarkdown(text) {
+  return (text || '')
+    .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br/>');
+}
+
+export async function askPaintVision(imageBase64, prompt) {
   try {
-    const res = await fetch('http://localhost:8000/api/brain', {
+    const res = await fetch(`${API_BASE}/api/paint-vision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_base64: imageBase64, prompt })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.reply;
+    }
+  } catch (_) {}
+  return askNeuralBrain(prompt, 'assistant');
+}
+
+export async function askNeuralBrain(prompt, mode = 'assistant') {
+  try {
+    const res = await fetch(`${API_BASE}/api/brain`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, mode })
@@ -449,23 +717,8 @@ export async function askNeuralBrain(prompt, mode = 'chat') {
       const data = await res.json();
       return data.reply;
     }
-  } catch (_) {
-    // Fallback response while backend is offline
-  }
-
-  await new Promise((r) => setTimeout(r, 450));
-  if (mode === 'browser') {
-    return `
-      <h2 class="retro-page-title">🌐 NeuralNet Result: ${prompt}</h2>
-      <p><b>Summary:</b> Chronos Explorer synthesized this live page for <i>"${prompt}"</i>.</p>
-      <ul style="margin:6px 0 6px 18px;">
-        <li><b>Architecture:</b> Decoupled State-Driven OS running inside a 1995 CRT rig.</li>
-        <li><b>AI Status:</b> Ready to connect to FastAPI Python Backend on <code>localhost:8000/api/brain</code>.</li>
-      </ul>
-      <p style="background:#eee;padding:6px;border:1px solid #999;">💡 <i>Tip: Start the Python FastAPI server to stream live LLM responses directly into Chronos Explorer!</i></p>
-    `;
-  }
-  return `Processed "${prompt.slice(0, 40)}..." — Ready for live FastAPI LLM connection!`;
+  } catch (_) {}
+  return `[FastAPI Offline] Make sure uvicorn is running on port 8000!`;
 }
 
 export const windowManager = new OSWindowManager();

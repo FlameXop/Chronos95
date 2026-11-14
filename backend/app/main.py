@@ -1,5 +1,7 @@
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from app.services.brain_service import brain_service
 
@@ -18,12 +20,12 @@ app.add_middleware(
 )
 
 class BrainRequest(BaseModel):
-    prompt: str = Field(..., description="User query or text content")
-    mode: str = Field(default="assistant", description="browser | notepad | assistant | paint")
+    prompt: str = Field(..., max_length=8000)
+    mode: str = Field(default="assistant")
 
 class PaintVisionRequest(BaseModel):
-    image_base64: str = Field(..., description="Base64 encoded PNG from PixelPaint canvas")
-    prompt: str = Field(default="Analyze this drawing")
+    image_base64: str = Field(..., max_length=2_500_000)
+    prompt: str = Field(default="Analyze this drawing", max_length=2000)
 
 @app.get("/health")
 async def health_check():
@@ -36,5 +38,10 @@ async def ask_brain(req: BrainRequest):
 
 @app.post("/api/paint-vision")
 async def analyze_paint(req: PaintVisionRequest):
-    reply = brain_service.analyze_canvas_image(req.image_base64, req.prompt)
+    reply = await brain_service.analyze_canvas_image(req.image_base64, req.prompt)
     return {"reply": reply}
+
+# Serve the /frontend folder directly at "/" so 1 cloud link runs the whole app!
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

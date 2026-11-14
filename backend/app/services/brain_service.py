@@ -1,159 +1,180 @@
-import ast
 import base64
 import os
-import struct
+from pathlib import Path
 from dotenv import load_dotenv
 import httpx
 
-load_dotenv()
-
 class BrainService:
     def __init__(self):
-        self.api_key = os.getenv("LLM_API_KEY", "").strip()
-        self.api_url = os.getenv(
+        self.working_model = None
+
+    def _get_config(self):
+        backend_dir = Path(__file__).resolve().parents[2]
+        root_dir = backend_dir.parent
+        for path in [backend_dir / ".env", root_dir / ".env"]:
+            if path.exists():
+                load_dotenv(dotenv_path=path, override=True)
+                break
+
+        api_key = os.getenv("LLM_API_KEY", "").strip().strip('"').strip("'")
+        api_url = os.getenv(
             "LLM_API_URL", "https://api.groq.com/openai/v1/chat/completions"
-        )
-        self.model = os.getenv("LLM_MODEL", "llama-3.1-8b-instant")
+        ).strip()
+        model = os.getenv("LLM_MODEL", "openai/gpt-oss-20b").strip()
+        return api_key, api_url, model
 
     async def process_prompt(self, prompt: str, mode: str = "assistant") -> str:
         clean_prompt = (prompt or "").strip()
         if not clean_prompt:
-            return "Beep boop! Send me a non-empty prompt so my neural circuits can process it."
+            return "Hey! Tell me what you'd like to open, write, draw, or search."
 
-        # 1. Try External OpenAI-Compatible / Groq / Bedrock Proxy API if configured in .env
-        if self.api_key:
-            try:
-                reply = await self._call_external_llm(clean_prompt, mode)
-                if reply:
-                    return reply
-            except Exception:
-                pass  # Seamlessly fall back to Local Python Engine so app never crashes!
+        api_key, api_url, env_model = self._get_config()
+        if api_key:
+            reply = await self._call_groq_text(clean_prompt, mode, api_key, api_url, env_model)
+            if reply:
+                return reply
 
-        # 2. Safe Built-In Deterministic Python Engine (Zero API Key Required!)
-        return self._run_local_engine(clean_prompt, mode)
+        # Safe fallback if running without an API key
+        return self._local_fallback(clean_prompt, mode)
 
-    async def _call_external_llm(self, prompt: str, mode: str) -> str:
+    async def _call_groq_text(
+        self, prompt: str, mode: str, api_key: str, api_url: str, env_model: str
+    ) -> str:
         system_prompts = {
             "browser": (
-                "You are Chronos Explorer 1995. Return ONLY clean HTML (using <h2>, <p>, <ul>, "
-                "<li>, <b>, <hr>) answering the user's query like an informative 1995 web page."
+                "You are Chronos Explorer, an AI web encyclopedia. Generate a clean, informative "
+                "webpage for the user's query using raw HTML only (no ```html fences). Use:\n"
+                "<div class='web-article'>"
+                "<div class='web-hero'><h1>Topic Title</h1><p>Brief summary</p></div>"
+                "<p>Main explanation paragraph...</p>"
+                "<div class='web-grid'>"
+                "<div class='web-card'><h3>Key Takeaways</h3><ul><li>Point 1</li><li>Point 2</li></ul></div>"
+                "<div class='web-card'><h3>Deep Dive</h3><p>Details...</p></div>"
+                "</div>"
+                "<p><b>Related:</b> <a href='#' data-search='Related Topic'>Related Topic</a></p>"
+                "</div>"
             ),
             "notepad": (
-                "You are Byte, a retro 1995 coding & note assistant. Summarize the notes or "
-                "refactor/explain the code concisely in plain text."
+                "You are an AI writer and editor inside NotePad.exe. "
+                "Output ONLY the final written text, summary, notes, or code requested by the user. "
+                "Do not include conversational filler like 'Here is your text:'."
             ),
             "assistant": (
-                "You are Byte, the friendly robotic assistant inside Chronos 95 OS. "
-                "Give a helpful, concise, slightly retro-themed answer in 2-4 sentences."
+                "You are Byte, the smart desktop AI assistant inside Chronos 95 OS. "
+                "Reply naturally, concisely, and helpfully like a real creative partner. "
+                "Never output random HTML/CSS code unless the user specifically asks for code."
             ),
         }
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompts.get(mode, system_prompts["assistant"])},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.6,
-            "max_tokens": 450,
-        }
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.post(self.api_url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
 
-    def _run_local_engine(self, prompt: str, mode: str) -> str:
-        # MODE A: CHRONOS EXPLORER (Generates a structured 90s Web Page)
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        candidates = []
+        if self.working_model:
+            candidates.append(self.working_model)
+        for m in [
+            env_model,
+            "openai/gpt-oss-20b",
+            "openai/gpt-oss-120b",
+            "llama-3.3-70b-versatile",
+        ]:
+            if m and m not in candidates:
+                candidates.append(m)
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            for model_name in candidates:
+                payload = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": system_prompts.get(mode, system_prompts["assistant"])},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.65,
+                    "max_tokens": 750,
+                }
+                try:
+                    resp = await client.post(api_url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        self.working_model = model_name
+                        content = resp.json()["choices"][0]["message"]["content"].strip()
+                        if mode == "browser" and "```" in content:
+                            content = content.replace("```html", "").replace("```", "").strip()
+                        return content
+                except Exception:
+                    continue
+        return ""
+
+    async def analyze_canvas_image(self, image_base64: str, prompt: str) -> str:
+        """Uses real Multimodal Vision to actually SEE what is drawn on PixelPaint!"""
+        raw_b64 = (image_base64 or "").split(",")[-1]
+        user_question = (prompt or "").strip() or (
+            "Look at what I drew on the canvas. Tell me what you see, suggest what colors or details "
+            "I could add next, and ask me what I want to do with this drawing!"
+        )
+
+        api_key, api_url, _ = self._get_config()
+        if api_key and raw_b64:
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            vision_models = [
+                "meta-llama/llama-4-scout-17b-16e-instruct",
+                "meta-llama/llama-4-maverick-17b-128e-instruct",
+                "llama-3.2-11b-vision-preview",
+            ]
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                for v_model in vision_models:
+                    payload = {
+                        "model": v_model,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": (
+                                            "You are Byte, a helpful art & design companion looking at the user's "
+                                            "PixelPaint canvas. DO NOT output HTML/CSS code. "
+                                            "1) Clearly identify what object/scene they drew and what colors they used. "
+                                            "2) Answer their question or suggest 2 specific colors (with hex codes) "
+                                            "or details that would make the drawing look even better. "
+                                            "3) Ask what they want to add next.\n\n"
+                                            f"User message: {user_question}"
+                                        ),
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {"url": f"data:image/png;base64,{raw_b64}"},
+                                    },
+                                ],
+                            }
+                        ],
+                        "temperature": 0.6,
+                        "max_tokens": 350,
+                    }
+                    try:
+                        resp = await client.post(api_url, headers=headers, json=payload)
+                        if resp.status_code == 200:
+                            return resp.json()["choices"][0]["message"]["content"].strip()
+                    except Exception:
+                        continue
+
+            # If vision model is unavailable, answer conversationally using text model (NO random code!)
+            return await self.process_prompt(
+                f"The user is drawing in PixelPaint and asks: '{user_question}'. "
+                "Give friendly, practical color and drawing advice (include 2 hex color suggestions) "
+                "and ask what they want to draw next. Do NOT output HTML code.",
+                mode="assistant",
+            )
+
+        return (
+            "I see your canvas sketch! Try adding a warm accent color like `#FF6B35` (Sunset Orange) "
+            "or `#FFD166` (Gold) for highlights. What are you planning to add to the drawing next?"
+        )
+
+    def _local_fallback(self, prompt: str, mode: str) -> str:
         if mode == "browser":
-            topic = prompt.replace("http://", "").replace("https://", "")
-            words = [w for w in topic.split() if len(w) > 2]
-            keywords = ", ".join(words[:5]) if words else "Chronos, 1995, NeuralNet"
             return (
-                f"<h2 class='retro-page-title'>🌐 Chronos Web Directory: {topic}</h2>"
-                f"<p><b>URL:</b> <code>chronos://{topic.lower().replace(' ', '-')}</code> | "
-                f"<b>Status:</b> 200 OK (FastAPI Neural Node)</p>"
-                f"<hr style='margin:6px 0;'/>"
-                f"<p>Welcome to the synthesized knowledge page for <b>{topic}</b>. "
-                f"Our Python FastAPI backend analyzed your query across indexed nodes:</p>"
-                f"<ul style='margin:6px 0 8px 18px;'>"
-                f"<li><b>Indexed Keywords:</b> {keywords}</li>"
-                f"<li><b>Overview:</b> '{topic}' is rendered dynamically via Chronos 95's "
-                f"state-driven REST architecture.</li>"
-                f"<li><b>Related Links:</b> <u>chronos://docs/{words[0].lower() if words else 'main'}</u></li>"
-                f"</ul>"
-                f"<div style='background:#efefef;border:1px inset #aaa;padding:6px;font-size:11px;'>"
-                f"<b>🤖 Byte Web Summary:</b> Query processed in 0.4ms by FastAPI Backend."
-                f"</div>"
+                f"<div class='web-article'><div class='web-hero'><h1>{prompt.title()}</h1>"
+                f"<p>Chronos Local Knowledge Node</p></div>"
+                f"<p>Overview article for <b>{prompt}</b> synthesized by Chronos 95.</p></div>"
             )
-
-        # MODE B: NOTEPAD (Uses Python's AST module to inspect code OR summarizes text!)
-        if mode == "notepad":
-            lines = [line.strip() for line in prompt.splitlines() if line.strip()]
-            word_count = len(prompt.split())
-            # Check if the user wrote Python code in NotePad!
-            try:
-                tree = ast.parse(prompt)
-                funcs = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
-                classes = [n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
-                if funcs or classes:
-                    return (
-                        f"[Python AST Code Analysis Passed ✓]\n"
-                        f"- Syntax: Valid Python 3 code ({len(lines)} lines)\n"
-                        f"- Functions detected: {', '.join(funcs) if funcs else 'None'}\n"
-                        f"- Classes detected: {', '.join(classes) if classes else 'None'}"
-                    )
-            except SyntaxError:
-                pass
-
-            preview = lines[0][:60] if lines else prompt[:60]
-            return (
-                f"[Byte NotePad Summary]\n"
-                f"- Stats: {len(lines)} non-empty lines | {word_count} words\n"
-                f"- Key Focus: \"{preview}...\"\n"
-                f"- Action Item: Structured & saved in Chronos 95 local memory."
-            )
-
-        # MODE C: BYTE DESKTOP ASSISTANT
-        low = prompt.lower()
-        if "paint" in low or "draw" in low:
-            return (
-                "Open PixelPaint.exe from the desktop, sketch with the Brush/Rectangle/Circle tools, "
-                "and click '🤖 Inspect'—my FastAPI vision endpoint will decode your PNG canvas!"
-            )
-        if "theme" in low or "wallpaper" in low:
-            return (
-                "Open 'Personalize' on the desktop to switch between Classic Teal, Cyber Matrix, "
-                "Synthwave Sunset, and Deep Space themes!"
-            )
-        return (
-            f"Beep boop! FastAPI Backend received: \"{prompt}\". "
-            f"All Chronos 95 OS states (Audio, Explorer Tabs, NotePad, and PixelPaint) are running at 100%!"
-        )
-
-    def analyze_canvas_image(self, image_base64: str, prompt: str) -> str:
-        """Decodes base64 PNG from PixelPaint and returns dimensions + retro HTML wireframe."""
-        try:
-            raw_b64 = image_base64.split(",")[-1]
-            img_bytes = base64.b64decode(raw_b64)
-            width, height = 405, 255
-            # Parse real PNG IHDR width & height bytes if valid PNG
-            if img_bytes[:8] == b"\x89PNG\r\n\x1a\n" and len(img_bytes) >= 24:
-                width, height = struct.unpack(">II", img_bytes[16:24])
-            size_kb = round(len(img_bytes) / 1024, 1)
-        except Exception:
-            width, height, size_kb = 405, 255, 4.2
-
-        return (
-            f"Scanned PNG Canvas (<b>{width}×{height}px</b>, {size_kb} KB) via FastAPI!<br/>"
-            f"<b>Generated Retro Component Snippet:</b><br/>"
-            f"<code style='display:block;background:#222;color:#0f0;padding:4px;margin-top:3px;font-size:9px;'>"
-            f"&lt;div class=\"win95-card\" style=\"width:{width}px;height:{height}px;\"&gt;<br/>"
-            f"  &lt;!-- Synthesized from PixelPaint.exe --&gt;<br/>"
-            f"&lt;/div&gt;</code>"
-        )
+        return f"Processed: {prompt}"
 
 brain_service = BrainService()
