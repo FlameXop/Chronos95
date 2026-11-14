@@ -1,7 +1,9 @@
 // Automatically works on localhost:5500 -> localhost:8000 AND on a single deployed cloud URL!
-const API_BASE = (window.location.port === '8000' || window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
-  ? ''
-  : 'http://localhost:8000';
+const API_BASE =
+  window.location.port === '8000' ||
+  (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+    ? ''
+    : 'http://localhost:8000';
 
 class OSWindowManager {
   constructor() {
@@ -146,22 +148,28 @@ class OSWindowManager {
     return this.lastBrowserText || '';
   }
 
-  // FIXED: Defaults to append = true so storing multiple items adds BELOW existing content!
-  writeToNotepad(content, append = true) {
+  // BULLETPROOF APPEND: Always keeps existing text and types the new text right below it!
+  writeToNotepad(newContent, append = true) {
+    const cleanNew = (newContent || '').trim();
+    if (!cleanNew) return;
+
+    // 1. Make sure NotePad window is open and visible
     const npWin = this.openApp('notepad');
-    const area = npWin.querySelector('#np-text');
-    const status = npWin.querySelector('#np-status');
+    const area = npWin ? npWin.querySelector('#np-text') : null;
+    const status = npWin ? npWin.querySelector('#np-status') : null;
+
+    // 2. Always grab the real existing text (from textarea OR localStorage)
+    const existingText = (area ? area.value : localStorage.getItem('chronos_notepad') || '').trim();
+
+    // 3. If appending and there is already text, just add a blank line and type ahead!
+    const finalText = append && existingText ? `${existingText}\n\n${cleanNew}` : cleanNew;
+
     if (area) {
-      const current = area.value.trim();
-      if (append && current) {
-        area.value = `${current}\n\n────────────────────────────────\n${content}`;
-      } else {
-        area.value = content;
-      }
+      area.value = finalText;
       area.scrollTop = area.scrollHeight;
-      localStorage.setItem('chronos_notepad', area.value);
-      if (status) status.textContent = 'Appended & Saved ✓';
     }
+    localStorage.setItem('chronos_notepad', finalText);
+    if (status) status.textContent = 'Appended & Saved ✓';
   }
 
   getCanvasDataUrl() {
@@ -174,6 +182,7 @@ class OSWindowManager {
   }
 
   renderTaskbarTabs() {
+    if (!this.taskbarTabs) return;
     this.taskbarTabs.innerHTML = '';
     Object.keys(this.openWindows).forEach((appId) => {
       const winEl = this.openWindows[appId];
@@ -196,7 +205,11 @@ class OSWindowManager {
   }
 
   makeDraggable(winEl, handleEl, appId) {
-    let isDragging = false, startX = 0, startY = 0, origX = 0, origY = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let origX = 0;
+    let origY = 0;
 
     handleEl.addEventListener('mousedown', (e) => {
       if (e.target.tagName === 'BUTTON' || winEl.classList.contains('maximized')) return;
@@ -214,14 +227,23 @@ class OSWindowManager {
       winEl.style.top = `${Math.max(0, origY + (e.clientY - startY))}px`;
     });
 
-    window.addEventListener('mouseup', () => { isDragging = false; });
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
   }
 
   // FULL 8-DIRECTION RESIZE (TOP, BOTTOM, LEFT, RIGHT & CORNERS)
   makeResizable(winEl, appId) {
-    let isResizing = false, dir = '', startX = 0, startY = 0;
-    let startW = 0, startH = 0, startL = 0, startT = 0;
-    const minW = 260, minH = 170;
+    let isResizing = false;
+    let dir = '';
+    let startX = 0;
+    let startY = 0;
+    let startW = 0;
+    let startH = 0;
+    let startL = 0;
+    let startT = 0;
+    const minW = 260;
+    const minH = 170;
 
     winEl.querySelectorAll('.rz-handle').forEach((handle) => {
       handle.addEventListener('mousedown', (e) => {
@@ -245,15 +267,12 @@ class OSWindowManager {
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      // East (Right)
       if (dir.includes('e')) {
         winEl.style.width = `${Math.max(minW, startW + dx)}px`;
       }
-      // South (Bottom)
       if (dir.includes('s')) {
         winEl.style.height = `${Math.max(minH, startH + dy)}px`;
       }
-      // West (Left — moves left edge while keeping right edge anchored!)
       if (dir.includes('w')) {
         const possibleW = startW - dx;
         if (possibleW >= minW) {
@@ -261,7 +280,6 @@ class OSWindowManager {
           winEl.style.left = `${Math.max(0, startL + dx)}px`;
         }
       }
-      // North (Top — moves top edge while keeping bottom edge anchored!)
       if (dir.includes('n')) {
         const possibleH = startH - dy;
         if (possibleH >= minH) {
@@ -271,14 +289,19 @@ class OSWindowManager {
       }
     });
 
-    window.addEventListener('mouseup', () => { isResizing = false; });
+    window.addEventListener('mouseup', () => {
+      isResizing = false;
+    });
   }
 
   getAppConfig(appId) {
     const apps = {
       explorer: {
         title: '🌍 Chronos Explorer',
-        width: '510px', height: '340px', left: '45px', top: '12px',
+        width: '510px',
+        height: '340px',
+        left: '45px',
+        top: '12px',
         html: `
           <div class="browser-tabs-bar" id="exp-tabs-bar"></div>
           <div class="browser-bar">
@@ -388,7 +411,9 @@ class OSWindowManager {
             if (!q) return;
 
             input.value = q;
-            current.url = q.startsWith('http') ? q : `http://chronos.net/${q.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+            current.url = q.startsWith('http')
+              ? q
+              : `http://chronos.net/${q.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
             current.title = q.replace(/^https?:\/\//, '');
 
             if (q.toLowerCase() === 'http://welcome.com' || q.toLowerCase() === 'welcome.com') {
@@ -423,14 +448,19 @@ class OSWindowManager {
 
           homeBtn.addEventListener('click', () => runSearch('http://welcome.com'));
           goBtn.addEventListener('click', () => runSearch());
-          input.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') runSearch();
+          });
           renderTabs();
         }
       },
 
       notepad: {
         title: '📝 NotePad.exe',
-        width: '435px', height: '305px', left: '95px', top: '26px',
+        width: '435px',
+        height: '305px',
+        left: '95px',
+        top: '26px',
         html: `
           <div class="win-menubar">
             <span id="np-ai" style="cursor:pointer;color:#000080;font-weight:bold;">✨ Write / Enhance with Byte</span>
@@ -476,26 +506,32 @@ class OSWindowManager {
             const start = area.selectionStart;
             const end = area.selectionEnd;
             const hasSelection = start !== end;
-            const targetText = hasSelection ? fullText.slice(start, end) : fullText;
+
+            const lines = fullText.trim().split('\n');
+            const lastLinePrompt = lines[lines.length - 1].trim();
+            const targetPrompt = hasSelection ? fullText.slice(start, end).trim() : lastLinePrompt;
 
             status.textContent = '⏳ Byte writing...';
-            const res = await askNeuralBrain(targetText, 'notepad');
+            const res = await askNeuralBrain(targetPrompt, 'notepad');
 
             if (hasSelection) {
-              area.value = fullText.slice(0, start) + res + fullText.slice(end);
+              area.value = fullText.slice(0, start) + res.trim() + fullText.slice(end);
             } else {
-              // Append below if existing notes have multiple sections, or replace single command
-              area.value = fullText.includes('────') ? `${fullText}\n\n${res}` : res;
+              area.value = `${fullText.trim()}\n\n${res.trim()}`;
             }
+            area.scrollTop = area.scrollHeight;
             localStorage.setItem('chronos_notepad', area.value);
-            status.textContent = 'Enhanced ✨';
+            status.textContent = 'Appended ✨';
           });
         }
       },
 
       paint: {
         title: '🎨 PixelPaint.exe',
-        width: '515px', height: '355px', left: '75px', top: '12px',
+        width: '515px',
+        height: '355px',
+        left: '75px',
+        top: '12px',
         html: `
           <div class="paint-layout">
             <div class="paint-sidebar">
@@ -528,7 +564,10 @@ class OSWindowManager {
 
       settings: {
         title: '⚙️ Display & Personalization',
-        width: '320px', height: '220px', left: '140px', top: '65px',
+        width: '320px',
+        height: '220px',
+        left: '140px',
+        top: '65px',
         html: `
           <p style="font-size:11px;margin-bottom:8px;">Select a desktop wallpaper theme for Chronos 95:</p>
           <div style="display:flex;flex-direction:column;gap:6px;">
@@ -556,15 +595,29 @@ class OSWindowManager {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    let tool = 'brush', color = '#000080', size = 4;
-    let drawing = false, startX = 0, startY = 0, snapshot = null;
+    let tool = 'brush';
+    let color = '#000080';
+    let size = 4;
+    let drawing = false;
+    let startX = 0;
+    let startY = 0;
+    let snapshot = null;
 
     const colorInput = win.querySelector('#pt-color');
     const hexInput = win.querySelector('#pt-hex');
     const sizeInput = win.querySelector('#pt-size');
     const sizeVal = win.querySelector('#pt-size-val');
 
-    const colors = ['#000000', '#ffffff', '#ff0000', '#00aa00', '#000080', '#ffff00', '#ff00ff', '#00ffff'];
+    const colors = [
+      '#000000',
+      '#ffffff',
+      '#ff0000',
+      '#00aa00',
+      '#000080',
+      '#ffff00',
+      '#ff00ff',
+      '#00ffff'
+    ];
     const swatchRow = win.querySelector('#pt-swatches');
     colors.forEach((c) => {
       const s = document.createElement('div');
@@ -578,7 +631,10 @@ class OSWindowManager {
       swatchRow.appendChild(s);
     });
 
-    colorInput.addEventListener('input', (e) => { color = e.target.value; hexInput.value = color; });
+    colorInput.addEventListener('input', (e) => {
+      color = e.target.value;
+      hexInput.value = color;
+    });
     hexInput.addEventListener('change', (e) => {
       if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
         color = e.target.value;
@@ -643,7 +699,9 @@ class OSWindowManager {
       }
     });
 
-    window.addEventListener('mouseup', () => { drawing = false; });
+    window.addEventListener('mouseup', () => {
+      drawing = false;
+    });
 
     win.querySelector('#pt-clear').addEventListener('click', () => {
       ctx.fillStyle = '#ffffff';
@@ -652,7 +710,8 @@ class OSWindowManager {
 
     win.querySelector('#pt-ai').addEventListener('click', async () => {
       const byteBubble = document.getElementById('byte-bubble');
-      const byteHistory = document.getElementById('byte-history') || document.getElementById('byte-text');
+      const byteHistory =
+        document.getElementById('byte-history') || document.getElementById('byte-text');
       if (!byteBubble || !byteHistory) return;
 
       byteBubble.classList.remove('hidden');

@@ -221,8 +221,8 @@ byteInput.addEventListener('focus', () => openFullChatLog());
 async function executeSmartOSWorkflow(rawText) {
   const cmd = rawText.toLowerCase().trim();
 
-  // Clear chat memory command if user ever wants a fresh start
-  if (cmd === 'clear chat' || cmd === 'clear history' || cmd === 'forget everything') {
+  // 1. Clear chat memory if requested
+  if (cmd === 'clear chat' || cmd === 'clear history') {
     byteChatContext = [];
     localStorage.removeItem('chronos_byte_html');
     localStorage.removeItem('chronos_byte_context');
@@ -231,30 +231,39 @@ async function executeSmartOSWorkflow(rawText) {
     return '🧹 Chat history cleared!';
   }
 
-  // WORKFLOW A: Close / Minimize / Maximize / Open Windows
-  if (cmd.includes('close all') || cmd.includes('close everything') || cmd === 'reset desktop') {
-    windowManager.closeAll();
-    return '🧹 Closed all open windows!';
-  }
+  // 2. Check if user is asking to WRITE / ADD / SAVE / APPEND to NotePad
+  const notepadIsOpen = Boolean(windowManager.openWindows['notepad']);
+  const mentionsNotepad = /\b(notepad|note pad|notes|editor)\b/.test(cmd);
+  const hasWriteAction = /\b(add|append|save|store|write|put|copy|insert|summarize|summarise|give me|make a|list)\b/.test(cmd);
+  const asksForFormat = /\b(pointer|pointers|bullet|bullets|essay|paragraph|recipe|recipie|summary|steps|code)\b/.test(cmd);
 
-  const mentionsClose = /\b(close|exit|quit|kill|shut|hide window)\b/.test(cmd);
-  const mentionsMin = /\b(minimize|minimise)\b/.test(cmd);
-  const mentionsMax = /\b(maximize|maximise|fullscreen|full screen)\b/.test(cmd);
-  const mentionsOpen = /\b(open|launch|start|run|show)\b/.test(cmd);
+  // Triggers if they mention notepad OR if NotePad is already open and they give a write/add command!
+  const isNotepadTask =
+    (mentionsNotepad && (hasWriteAction || asksForFormat)) ||
+    (notepadIsOpen && hasWriteAction && asksForFormat) ||
+    cmd.startsWith('append ') ||
+    cmd.startsWith('add to note') ||
+    cmd.startsWith('save to note');
 
-  const appMatchers = [
-    { id: 'paint', name: 'PixelPaint.exe', words: ['paint', 'pixelpaint', 'drawing app', 'canvas'] },
-    { id: 'explorer', name: 'Chronos Explorer', words: ['explorer', 'browser', 'chronos', 'web', 'internet'] },
-    { id: 'notepad', name: 'NotePad.exe', words: ['notepad', 'note pad', 'notes', 'editor'] },
-    { id: 'settings', name: 'Personalization Settings', words: ['settings', 'setting', 'personalize', 'theme', 'wallpaper'] }
-  ];
+  // 3. Window Open / Close / Minimize / Maximize (Only when NOT writing to NotePad!)
+  if (!isNotepadTask) {
+    if (cmd.includes('close all') || cmd === 'reset desktop') {
+      windowManager.closeAll();
+      return '🧹 Closed all open windows!';
+    }
 
-  // Only trigger window open/close if NOT asking to "save browser in notepad"
-  const isCrossAppSave =
-    /\b(add|append|save|store|write|put|copy|send|insert|summarize|summarise)\b/.test(cmd) &&
-    /\b(notepad|note pad|notes|editor)\b/.test(cmd);
+    const mentionsClose = /\b(close|exit|quit|kill)\b/.test(cmd);
+    const mentionsMin = /\b(minimize|minimise|hide)\b/.test(cmd);
+    const mentionsMax = /\b(maximize|maximise|fullscreen|full screen)\b/.test(cmd);
+    const mentionsOpen = /\b(open|launch|start|run|show)\b/.test(cmd);
 
-  if (!isCrossAppSave) {
+    const appMatchers = [
+      { id: 'paint', name: 'PixelPaint.exe', words: ['paint', 'pixelpaint', 'drawing app'] },
+      { id: 'explorer', name: 'Chronos Explorer', words: ['explorer', 'browser', 'chronos', 'web'] },
+      { id: 'notepad', name: 'NotePad.exe', words: ['notepad', 'note pad', 'notes', 'editor'] },
+      { id: 'settings', name: 'Personalization Settings', words: ['settings', 'setting', 'personalize', 'theme'] }
+    ];
+
     for (const app of appMatchers) {
       if (app.words.some((w) => cmd.includes(w))) {
         if (mentionsClose) {
@@ -278,25 +287,30 @@ async function executeSmartOSWorkflow(rawText) {
     }
   }
 
-  // WORKFLOW B & C COMBINED: Any request to add/save/write to NotePad!
-  if (isCrossAppSave) {
-    const browserContent = windowManager.getBrowserText();
-    // If user says "this", "browser", "explorer", or "page" (and browser has content), use the Browser page!
-    const wantsBrowserContent =
-      browserContent &&
-      /\b(this|browser|explorer|page|website|article|it)\b/.test(cmd);
+  // 4. EXECUTE NOTEPAD APPEND (Identical clean pipeline for 1st, 2nd, 3rd, Nth query!)
+  if (isNotepadTask) {
+    // Strip meta-words ("to notepad", "in notepad", "and save") so the LLM only sees the pure writing task!
+    const cleanTask = rawText
+      .replace(/\b(in|to|into|inside)\s+(the\s+)?(notepad|note pad|notes|editor)\b/gi, '')
+      .replace(/\b(and\s+)?(save|store|append)\s+(it|this)?\b/gi, '')
+      .trim();
 
-    const promptForNotepad = wantsBrowserContent
-      ? `Source webpage content from Chronos Explorer:\n"""\n${browserContent}\n"""\n\nUser instruction: "${rawText}". Fulfill this instruction using the webpage content above. Output ONLY the final text/bullets to be appended into NotePad:`
-      : `User instruction for NotePad: "${rawText}". Output ONLY the final text/bullets/content to be appended into NotePad:`;
+    // ONLY include browser text if the user explicitly references the browser/page/this!
+    const explicitlyWantsBrowser = /\b(browser|borsser|explorer|page|website|this)\b/.test(cmd);
+    const browserContent = explicitlyWantsBrowser ? windowManager.getBrowserText() : '';
 
-    const generated = await askNeuralBrain(promptForNotepad, 'notepad');
-    windowManager.writeToNotepad(generated, true); // Guaranteed to APPEND below existing notes!
-    return `📝 Appended right below your existing notes in <b>NotePad.exe</b>!`;
+    const promptForBrain = browserContent
+      ? `Task: ${cleanTask || rawText}\n\nUse this reference text to fulfill the task:\n${browserContent.slice(0, 2500)}`
+      : (cleanTask || rawText);
+
+    const generatedText = await askNeuralBrain(promptForBrain, 'notepad');
+
+    // Type it right below whatever is already written in NotePad!
+    windowManager.writeToNotepad(generatedText, true);
+    return `📝 Appended right below your existing text in <b>NotePad.exe</b>!`;
   }
- 
 
-  // WORKFLOW D: User asks about their drawing / colors while painting!
+  // 5. PixelPaint Vision Questions
   if (cmd.includes('draw') || cmd.includes('canvas') || cmd.includes('colour') || cmd.includes('color') || cmd.includes('sketch')) {
     const canvasData = windowManager.getCanvasDataUrl();
     if (canvasData) {
@@ -304,7 +318,7 @@ async function executeSmartOSWorkflow(rawText) {
     }
   }
 
-  // WORKFLOW E: Search the web via Byte ("search <query>")
+  // 6. Web Search via Byte ("search <query>")
   if (cmd.startsWith('search ') || cmd.startsWith('browse ')) {
     const query = rawText.replace(/^(search|browse)\s+(for\s+)?/i, '').trim();
     const win = windowManager.openApp('explorer');
@@ -312,7 +326,7 @@ async function executeSmartOSWorkflow(rawText) {
     return `🌍 Opened <b>Chronos Explorer</b> and searched for <b>"${query}"</b>!`;
   }
 
-  // WORKFLOW F: Theme / Volume / Power Controls
+  // 7. Theme / Volume / Power Controls
   if (cmd.includes('matrix')) { windowManager.applyTheme('theme-matrix'); return '📟 Switched to <b>Cyber Matrix</b> theme!'; }
   if (cmd.includes('sunset')) { windowManager.applyTheme('theme-sunset'); return '🌆 Switched to <b>Synthwave Sunset</b> theme!'; }
   if (cmd.includes('space')) { windowManager.applyTheme('theme-space'); return '🌌 Switched to <b>Deep Space</b> theme!'; }
