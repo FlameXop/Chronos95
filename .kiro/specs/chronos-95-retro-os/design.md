@@ -2,502 +2,597 @@
 
 ## Overview
 
-Chronos 95 is a retro 1995-style CRT desktop rig and operating system. The Frontend is a static site in Vanilla HTML5, CSS3, and ES6 modules (`type="module"`), with no UI framework. The Backend is a Python 3.11+ FastAPI service that provides document persistence and the Chippy assistant, validated by Pydantic and shipped in Docker.
+Chronos 95 is a browser-based retro desktop simulation. The frontend is Vanilla HTML5, CSS3 and ES modules with no framework. It draws a CRT monitor, a PC tower, a 104-key on-screen keyboard and a mouse, and runs a Windows-95-style desktop inside the CRT screen. The backend is a FastAPI service ("Chronos 95 Neural Backend", version 1.95.0) that returns AI replies for the assistant Byte and for the Explorer, NotePad and PixelPaint apps. It can also serve the frontend directory as static files.
 
-The design rests on one rule from the steering file: every hardware and OS transition flows through the Store (`frontend/js/core/store.js`) and the Event_Bus (`frontend/js/core/eventBus.js`). Components never touch each other's DOM. Applications are plugin modules mounted by the Window_Manager (`frontend/js/core/windowManager.js`).
+This document describes the code as built. The frontend has no build step, no bundler and no test suite. The backend has one Hypothesis test.
 
-Key design decisions:
+Design decisions:
 
-- **Pure cores, thin shells.** Each component is split into a pure logic module (state machines, geometry, rasterizers, validators, formatters) and a thin DOM shell. Pure cores are property-tested. DOM shells get example tests. This is what makes property-based testing practical.
-- **Store is the only writer of Power_State.** Components request transitions. The Store validates them against a transition table and publishes `power:changed` after the state update.
-- **Event_Bus is synchronous and isolating.** A throwing subscriber is logged and never stops delivery. Subscribers are copied before dispatch so unsubscribe during dispatch is safe.
-- **Injected collaborators.** Clock, timers, API client, and `Date` are injected so tests use fake timers and mocks. No test needs a real browser clock or network.
-- **Backend layering.** Routers are thin. Pydantic models own validation. A `DocumentStore` protocol hides persistence. The `ChippyService` has a deterministic rule engine and an optional provider.
-- **Trademark safety by tooling.** A scanner script enforces Requirement 13 and 14.8 in CI.
-
-Research notes (summarized from established documentation, not newly fetched):
-
-- FastAPI returns HTTP 422 with a per-field error list for Pydantic validation failures. That matches Requirement 11.9 with little custom code.
-- Hypothesis `RuleBasedStateMachine` fits the Document_Store and CRUD lifecycle. Default `max_examples` is 100, which meets the 100-example floor, and it is set explicitly.
-- On the Frontend, `fast-check` is the property-based library for JavaScript, run with Node's built-in `node:test` runner. This avoids a bundler or framework and stays in dev-only tooling, outside the shipped Frontend.
-- Canvas `imageSmoothingEnabled = false` and `image-rendering: pixelated` are the standard way to keep pixel-exact output. Drawing algorithms operate on an in-memory `Uint8ClampedArray` buffer and write to the canvas with `putImageData`, which never anti-aliases.
+- **Power state in a store, notifications on an event bus.** `store.js` owns power, audio and lock state. It emits events through `eventBus.js`. `main.js` subscribes and updates the DOM.
+- **One window manager class for all apps.** `OSWindowManager` in `osApps.js` creates windows from a config object returned by `getAppConfig(appId)`. Each config has an `onMount` callback that wires the app's DOM. There are no per-app modules.
+- **Commands before AI.** Byte text goes through `executeSmartOSWorkflow`, which uses regex and keyword matching. Only unhandled text is sent to the LLM.
+- **LLM with local fallback.** `BrainService` tries a list of models in order and falls back to a local text routine, so the HTTP endpoints always return a reply string.
 
 ## Architecture
 
+### Module structure
+
+Files that exist:
+
+```
+frontend/index.html
+frontend/css/hardware.css, os-shell.css
+frontend/js/core/main.js, osApps.js, store.js, eventBus.js
+frontend/js/core/hardware/soundEngine.js
+frontend/js/apps/   (empty)
+frontend/js/ui/     (empty)
+backend/app/main.py
+backend/app/services/brain_service.py
+backend/app/tests/test_brain_pbt.py
+backend/Dockerfile, backend/requirements.txt
+docker-compose.yml
+```
+
 ```mermaid
 flowchart LR
-  subgraph Frontend [/frontend - ES modules]
-    Rig[ui/hardwareRig.js] -- power:button-pressed --> Bus
-    Store[core/store.js] -- power:changed --> Bus
-    Bus((core/eventBus.js))
-    Bus --> Boot[core/bootSequencer.js]
-    Bus --> Shut[core/shutdownSequencer.js]
-    Bus --> Shell[ui/osShell.js]
-    Bus --> WM[core/windowManager.js]
-    Shell --> Taskbar[ui/taskbar.js]
-    Shell --> Chippy[ui/chippyWidget.js]
-    WM -- mount/unmount --> Notepad[apps/notepadApp.js]
-    WM -- mount/unmount --> Paint[apps/paintApp.js]
-    Notepad --> Api[core/apiClient.js]
-    Paint --> Api
-    Chippy --> Api
-    Boot --> Api
+  subgraph Frontend["frontend (ES modules)"]
+    HTML[index.html]
+    MAIN[main.js<br/>power flow, Byte, tray, LEDs]
+    APPS[osApps.js<br/>OSWindowManager, API client]
+    STORE[store.js]
+    BUS[eventBus.js]
+    SND[hardware/soundEngine.js]
+    LS[(localStorage)]
   end
-  Api -- HTTP/JSON --> BE
-  subgraph BE [/backend - FastAPI]
-    Routers[app/routers] --> Models[app/models Pydantic]
-    Routers --> DS[app/store DocumentStore]
-    Routers --> CS[app/chippy ChippyService]
-    DS --> Disk[(Document_Store volume)]
+  subgraph Backend["backend (FastAPI)"]
+    API[app/main.py<br/>/health /api/brain /api/paint-vision]
+    BRAIN[services/brain_service.py<br/>BrainService]
+    STATIC[StaticFiles at /]
   end
+  LLM[(OpenAI-compatible LLM)]
+
+  HTML --> MAIN
+  MAIN --> STORE
+  MAIN --> BUS
+  MAIN --> SND
+  MAIN --> APPS
+  STORE --> BUS
+  SND --> STORE
+  APPS --> LS
+  MAIN --> LS
+  APPS -- "fetch POST" --> API
+  API --> BRAIN
+  BRAIN -- "httpx POST" --> LLM
+  STATIC -. serves .-> HTML
 ```
+
+`main.js` imports `eventBus`, `store`, `PowerState`, `soundEngine`, and from `osApps.js` the `windowManager`, `askNeuralBrain`, `askPaintVision` and `formatByteMarkdown` exports. `soundEngine.js` imports `store`. `store.js` imports `eventBus`.
 
 ### Power lifecycle
 
 ```mermaid
 stateDiagram-v2
   [*] --> OFF
-  OFF --> BOOTING: power:button-pressed
-  BOOTING --> RUNNING: boot:complete
-  RUNNING --> SHUTTING_DOWN: power:button-pressed
-  SHUTTING_DOWN --> OFF: shutdown:complete
+  OFF --> BOOTING: power button (beep)
+  BOOTING --> BOOTING: t=1.5 s BIOS hidden, splash shown
+  BOOTING --> RUNNING: t=3.4 s startup chime
+  RUNNING --> SHUTTING_DOWN: power button / Start > Shut Down / Byte "shutdown"
+  BOOTING --> SHUTTING_DOWN: power button
+  SHUTTING_DOWN --> OFF: 2.2 s after entering
 ```
 
-### Boot sequence
+Details:
+
+- The BIOS screen is visible as soon as BOOTING is entered (`POWER_STATE_CHANGED` handler).
+- The splash screen swap at 1.5 s is done directly in a timer callback in `main.js`. It does not go through the store.
+- The power button handler clears pending boot timers on every press. If the state is OFF it boots. Otherwise it calls `triggerGracefulShutdown()`.
+- A button press while SHUTTING_DOWN calls `triggerGracefulShutdown()` again. That clears the pending OFF timer and starts a new 2.2 s timer.
+- Sign Out does not change power state. It closes all windows, hides the desktop and shows the login dialog. OK on the dialog plays the startup chime and shows the desktop.
+
+### Byte message flow
 
 ```mermaid
 sequenceDiagram
-  participant U as User
-  participant R as HardwareRig
-  participant B as EventBus
-  participant S as Store
-  participant BS as BootSequencer
-  participant A as ApiClient
-  U->>R: click / Enter / Space
-  R->>B: power:button-pressed
-  B->>S: (store subscriber) requestTransition(BOOTING)
-  S->>B: power:changed {OFF -> BOOTING}
-  B->>BS: start
-  BS->>A: GET /api/health (2s timeout)
-  BS->>BS: memory test, hardware list, splash
-  BS->>B: boot:complete
-  B->>S: requestTransition(RUNNING)
-  S->>B: power:changed {BOOTING -> RUNNING}
+  actor U as User
+  participant M as main.js sendByteMessage
+  participant W as executeSmartOSWorkflow
+  participant WM as windowManager
+  participant C as askNeuralBrain
+  participant B as POST /api/brain
+  participant S as BrainService
+  participant L as LLM
+
+  U->>M: text + Enter / Send
+  M->>M: append user bubble, loading bubble
+  M->>W: rawText
+  alt command or NotePad task handled
+    W->>WM: openApp / closeApp / applyTheme / writeToNotepad
+    opt NotePad task
+      W->>C: cleaned prompt, mode "notepad"
+      C->>B: {prompt, mode}
+      B->>S: process_prompt
+      S->>L: chat completion (model list)
+      L-->>S: text or error
+      S-->>B: reply (LLM or local fallback)
+      B-->>C: {reply, mode}
+      C-->>W: reply
+    end
+    W-->>M: status HTML string
+  else returns null
+    W-->>M: null
+    M->>M: push "User: q" to byteChatContext
+    M->>C: last 10 context lines, mode "assistant"
+    C->>B: {prompt, mode}
+    B->>S: process_prompt
+    S-->>B: reply
+    B-->>C: {reply, mode}
+    C-->>M: reply
+  end
+  M->>M: formatByteMarkdown, set bubble HTML
+  M->>M: save chronos_byte_html and chronos_byte_context
 ```
 
-### Repository layout
+Order of checks inside `executeSmartOSWorkflow(rawText)`:
 
-```
-frontend/
-  index.html            (only <script type="module">)
-  css/                  crt.css, shell.css, window.css, apps.css
-  assets/               original icons and sounds only
-  js/core/              eventBus.js store.js windowManager.js bootSequencer.js
-                        shutdownSequencer.js apiClient.js powerRouter.js
-  js/ui/                hardwareRig.js osShell.js taskbar.js startMenu.js
-                        chippyWidget.js dialogs.js
-  js/apps/              notepadApp.js paintApp.js (+ pure helpers)
-  tests/                fast-check + node:test suites
-backend/
-  app/                  main.py config.py models.py store.py chippy.py routers/
-  tests/                Hypothesis suites
-  Dockerfile
-docker-compose.yml  .env.example
-tools/compliance_scan.py
-```
+1. `clear chat` / `clear history`: reset context and remove both Byte localStorage keys.
+2. Compute `isNotepadTask` from NotePad keywords, write verbs and format words, or the prefixes `append `, `add to note`, `save to note`.
+3. If not a NotePad task: `close all` / `reset desktop`, then per-app close, minimize, maximize and open keywords for paint, explorer, notepad and settings.
+4. NotePad task: strip "to/in notepad" and "save it" phrases, optionally add up to 2500 characters of browser text, call `askNeuralBrain(prompt, 'notepad')`, then `windowManager.writeToNotepad(reply, true)`.
+5. Canvas wording (`draw`, `canvas`, `colour`, `color`, `sketch`) while PixelPaint is open: `askPaintVision`.
+6. `search ` / `browse ` prefix: open Explorer and run its search.
+7. Theme keywords `matrix`, `sunset`, `space`, `teal`; `mute`, `unmute`; `shut down`, `shutdown`, `turn off` (shutdown runs after a 600 ms timeout).
+8. Otherwise return `null`.
 
 ## Components and Interfaces
 
-### Event_Bus (`core/eventBus.js`)
+### eventBus.js
 
-```
-subscribe(eventName: string, handler: (payload) => void): () => void   // returns unsubscribe
-publish(eventName: string, payload?: any): void
-```
-
-- Delivery list is a snapshot taken at publish time, in subscription order.
-- Handlers run inside try/catch. A failure logs `eventName` and the error, then delivery continues.
-- Unsubscribe flags the handler as removed, so a handler removed during a publish call is not invoked afterward.
-- Publishing with zero subscribers is a no-op.
-
-Event catalogue: `power:button-pressed`, `power:changed`, `boot:complete`, `shutdown:complete`, `app:launch-requested`, `window:focused`, `window:minimized`, `window:closed`, `window:restore-requested`, `window:minimize-requested`, `window:focus-requested`, `error:invalid-transition`, `error:invalid-app`.
-
-### Store (`core/store.js`)
-
-```
-getState(): { powerState, shell: { startMenuOpen, chippyVisible }, windows: {...} }
-requestTransition(next: any): { ok: boolean, reason?: string }
-resetShellState(): void
+```js
+class EventBus {
+  on(eventName: string, callback: (data) => void): void
+  emit(eventName: string, data?: any): void   // callbacks run in subscription order
+}
+export const eventBus: EventBus
 ```
 
-- Initial `powerState` is `OFF`, set before any subscriber exists.
-- Transition table: `{ OFF: BOOTING, BOOTING: RUNNING, RUNNING: SHUTTING_DOWN, SHUTTING_DOWN: OFF }`.
-- Accepted: write the new state, then publish `power:changed {previous, next}`. This order satisfies Requirement 1.10.
-- Rejected (including same-state or unknown values): state unchanged, return `{ok:false}`, publish exactly one `error:invalid-transition {current, requested}`.
-- On accepted transition to `OFF`, the Store resets shell and window state to the fresh-boot defaults (Requirement 5.7).
+There is no unsubscribe and callbacks are not wrapped in error handling.
 
-### Power router (`core/powerRouter.js`)
+### store.js
 
-Pure function `routePowerButton(powerState): string | null` returns `BOOTING` from `OFF`, `SHUTTING_DOWN` from `RUNNING`, and `null` otherwise. A small subscriber wires `power:button-pressed` to `store.requestTransition`. Likewise `boot:complete` (only when `BOOTING`) maps to `RUNNING`, and `shutdown:complete` (only when `SHUTTING_DOWN`) maps to `OFF`.
-
-### Hardware_Rig (`ui/hardwareRig.js`)
-
-- Pure `rigViewModel(powerState): { screen: 'black'|'crt', led: 'off'|'green'|'amber', effects: boolean, pressed: boolean } | null`. Returns `null` for unknown values so the shell keeps its current rendering (Requirement 2.11).
-- Shell owns only the rig DOM. It re-renders on `power:changed`, within one animation frame.
-- Power button is a native `<button>` with `aria-pressed`, a visible `:focus-visible` outline, and an accessible name. Enter and Space activation come from native button behavior. The shell publishes `power:button-pressed` only if the Store state is `OFF` or `RUNNING`.
-- Turn-on and turn-off animations are CSS keyframes of 400 to 1000 ms (design value: 700 ms). `@media (prefers-reduced-motion: reduce)` replaces them with a state change of 0 ms and disables flicker.
-
-### Boot_Sequencer and Shutdown_Sequencer
-
-`bootSequencer.js` is a small timeline runner over an injected `scheduler` (`setTimeout`/`clearTimeout`) and `api`.
-
-- Stages: memory test (900 ms), hardware list (900 ms), splash (1200 ms). Each exceeds the 500 ms minimum and the total is under 3 s, well within the 6000 ms cap.
-- Health check starts at boot start with a 2000 ms abort. On failure it shows "Chippy offline" for at least 1000 ms inside the hardware-list stage, with no change in stage order or total budget.
-- A `completed` flag guarantees exactly one `boot:complete` per boot. Escape during `BOOTING` cancels pending timers, then publishes `boot:complete` within 200 ms (design value: immediately). Escape afterward is ignored.
-- A subscriber on `power:changed` cancels all timers and output if the state leaves `BOOTING` before completion, with no `boot:complete`.
-- `shutdownSequencer.js` waits for all windows to close, shows "It is now safe to turn off your computer", and publishes `shutdown:complete` within 3000 ms of entering `SHUTTING_DOWN` (design value: 1500 ms).
-
-### Window_Manager (`core/windowManager.js`)
-
-```
-registerApp(appModule): { ok, missing?: string[], duplicate?: boolean }
-launch(appId): windowId | null
-focus(id) / minimize(id) / restore(id) / maximize(id) / close(id)
-closeAll(): void
+```js
+export const PowerState = { OFF, BOOTING, RUNNING, SHUTTING_DOWN } // string values equal the names
+class Store {
+  getState(): State
+  setPowerState(newPowerState): void            // emits POWER_STATE_CHANGED with the state string
+  setVolume(vol: number, muted = state.muted): void // clamps vol to [0,1]; emits AUDIO_STATE_CHANGED
+  setLocks(locksObj: Partial<Locks>): void      // merges; emits LOCKS_CHANGED with the full locks object
+}
+export const store: Store
 ```
 
-App_Contract (shape every plugin implements):
+Events:
 
+| Event | Payload | Subscriber effect in `main.js` |
+|---|---|---|
+| `POWER_STATE_CHANGED` | `PowerState` string | Resets CRT classes, hides all stages and popups, sets the PWR LED, shows the stage for the new state |
+| `AUDIO_STATE_CHANGED` | `{volume, muted, effectiveVolume}` | Sets the volume label (`NN%` or `MUTED`) and the tray icon (🔇 if muted or 0, 🔉 under 50, 🔊 otherwise) |
+| `LOCKS_CHANGED` | `{num, caps, scroll}` | Toggles `on` on `#led-num`, `#led-caps`, `#led-scroll` |
+
+### hardware/soundEngine.js
+
+```js
+class SoundEngine {
+  init(): void                          // lazy AudioContext, resumes if suspended
+  getEffectiveGain(baseGain): number    // 0 if muted or volume <= 0, else baseGain * volume
+  playBiosBeep(): void                  // base 0.1, 950 Hz square, 0.18 s
+  playStartupChime(): void              // base 0.07, 5 sine notes (261.63 ... 587.33 Hz), 80 ms apart, stops at 2.9 s
+  playKeyClick(): void                  // base 0.045, triangle 180 to 40 Hz, 25 ms; needs an existing ctx
+}
+export const soundEngine: SoundEngine
 ```
-{ id: string, title: string, icon: string,
-  defaultSize: { width: number, height: number },
-  mount(contentEl: HTMLElement, ctx: { bus, api }): void,
-  unmount(): void }
+
+`playBiosBeep` and `playStartupChime` return before creating a context when the effective gain is 0.
+
+### osApps.js
+
+Exports:
+
+```js
+export const windowManager: OSWindowManager
+export async function askNeuralBrain(prompt: string, mode = 'assistant'): Promise<string>
+export async function askPaintVision(imageBase64: string, prompt: string): Promise<string>
+export function formatByteMarkdown(text: string): string  // **x** -> <b>x</b>, `x` -> <code>x</code>, \n -> <br/>
 ```
 
-Pure core `windowModel.js` holds `windows: Map<id, {id, appId, x, y, w, h, minimized, maximized, restoreRect, z}>` plus `focusedId` and an ordered stack. All operations are pure `(model, op) => model` functions, which makes the invariants in Requirements 7.11 to 7.20 testable.
+`API_BASE` is `''` when `location.port === '8000'` or the hostname is not `localhost`/`127.0.0.1`. Otherwise it is `http://localhost:8000`.
 
-- Registration validation checks that all six members exist with the right types. It rejects duplicates and publishes `error:invalid-app` with the missing member names or the duplicate id.
-- `app:launch-requested` is ignored unless Store state is `RUNNING`. An unknown id publishes `error:invalid-app`. A throwing `mount` removes the partial window, publishes `error:invalid-app`, and leaves focus and stacking of other windows unchanged.
-- Move uses `clampMove(rect, dx, dy, display)`, keeping at least 40 px of the title bar inside the CRT_Display. Resize uses `clampResize(rect, min={200,120}, max=desktopArea)`.
-- Focus rule: exactly one focused window while a non-minimized window exists, none otherwise. When the focused window closes or minimizes, focus moves to the topmost non-minimized window.
-- On `SHUTTING_DOWN`, `closeAll()` calls each window's `unmount` once inside try/catch, always removes the window, and publishes `window:closed` for each. It never shows a confirmation dialog.
-- Plugin isolation: apps receive only their content element and the bus. The manager never imports an app. A bootstrap file (`main.js`) imports and registers apps, so adding an app means adding one line there, not editing existing app code.
+`askNeuralBrain` posts `{prompt, mode}` to `/api/brain` and returns `data.reply`. On a non-OK response or a thrown error it returns `"[FastAPI Offline] Make sure uvicorn is running on port 8000!"`.
 
-### OS_Shell, Taskbar, Start_Menu (`ui/*`)
+`askPaintVision` posts `{image_base64, prompt}` to `/api/paint-vision`. On a non-OK response or a thrown error it returns `askNeuralBrain(prompt, 'assistant')`.
 
-- Pure helpers: `iconsFor(registry)` (one icon per registered app), `formatClock(date)` (`h:mm AM/PM`), `truncateTitle(title)` (more than 20 characters gives the first 19 plus an ellipsis, 20 total), `taskbarButtons(windows)` (one per open window).
-- Taskbar button click picks the event from window state: minimized gives `window:restore-requested`, focused gives `window:minimize-requested`, otherwise `window:focus-requested`.
-- Shell ignores input while `SHUTTING_DOWN` and closes the Start_Menu on entering `SHUTTING_DOWN`.
-- Keyboard: roving tabindex in the Start_Menu with Up/Down; Escape closes and returns focus to the Start_Button.
-- A failed launch (`error:invalid-app` for an unknown app) shows an error dialog from `ui/dialogs.js`.
+`OSWindowManager`:
 
-### Chippy widget (`ui/chippyWidget.js`)
+```js
+class OSWindowManager {
+  zIndexCounter = 10; openWindows: {[appId]: HTMLElement}
+  lastBrowserText: string; lastBrowserTitle: string
 
-- Pure `validateQuestion(text)` accepts 1 to 2000 characters. `buildChatPayload({message, focusedAppId, context})` truncates context to 10000 characters.
-- State machine: `idle -> pending -> idle` (success clears input, failure keeps input and shows the fixed offline message). A 10 s abort covers hangs.
-- The "Ask Chippy about this text" command is offered only when the focused window is NotePad and its text is non-empty. The widget learns this from events and Store state, not from reading the NotePad DOM. NotePad publishes `notepad:text-changed {length, text}` events.
+  init(): void                              // caches #window-layer, #taskbar-tabs; applies saved theme
+  applyTheme(themeClass): void              // swaps class on #os-desktop; writes chronos_theme
+  openApp(appId): HTMLElement | null        // existing window: restore + focus; unknown id: null
+  focusWindow(appId): void                  // un-minimize, z-index = ++counter, re-render tabs
+  minimizeApp(appId): void
+  toggleMaximize(appId): void
+  closeApp(appId): boolean
+  closeAll(): void
+  getBrowserText(): string                  // #exp-viewport text if Explorer open, else lastBrowserText
+  writeToNotepad(newContent, append = true): void
+  getCanvasDataUrl(): string | null         // PNG data URL of #paint-canvas if PixelPaint open
+  renderTaskbarTabs(): void
+  makeDraggable(winEl, handleEl, appId): void
+  makeResizable(winEl, appId): void         // 8 handles, min 260 x 170
+  getAppConfig(appId): AppConfig | undefined
+  mountPaintLogic(win): void
+}
+```
 
-### NotePad_App (`apps/notepadApp.js`)
+Windows use `<div class="os-window">` with a title bar (`_`, `□`, `✕` buttons), a body, and eight `.rz-handle` elements. Drag and resize listeners are added to `window` on each window creation and are not removed when the window closes.
 
-- Pure helpers in `notepadModel.js`: `validateDocName(name)` (1 to 100 characters), `validateContent(text)` (at most 100000 characters), `windowTitle(name, dirty)`, and dirty check `text !== lastSaved`.
-- Save, Open, and close-confirmation flows use `apiClient`. On any failure the model keeps text, id, and last-saved unchanged.
+`writeToNotepad(text, append)` trims the new text and returns without doing anything if it is empty. It opens NotePad, reads the current text from `#np-text` (or `chronos_notepad` if the textarea is missing), and writes `existing + "\n\n" + new` when appending to non-empty text, otherwise just the new text. It saves to `chronos_notepad` and sets the status to "Appended & Saved ✓".
 
-### PixelPaint_App (`apps/paintApp.js`)
+App configs (`getAppConfig`):
 
-Pure raster core `pixelBuffer.js` on a 320x240 RGBA `Uint8ClampedArray`:
+| appId | Title | Size | Notes |
+|---|---|---|---|
+| `explorer` | 🌍 Chronos Explorer | 510x340 | Tabs, Home, Go, "📝 +NotePad"; `win.runExplorerSearch` is attached for Byte |
+| `notepad` | 📝 NotePad.exe | 435x305 | `#np-text`, Undo (one level), Clear, "✨ Write / Enhance with Byte" |
+| `paint` | 🎨 PixelPaint.exe | 515x355 | 405x255 canvas, brush, eraser, line, rect, circle, fill, size 1-28, 8 swatches, "👁️ Ask Byte" |
+| `settings` | ⚙️ Display & Personalization | 320x220 | Four `data-theme` buttons |
 
-- `plotLine(buf, x0, y0, x1, y1, color)` uses Bresenham with clipping. Pencil strokes draw a line between consecutive pointer samples, so no gaps.
-- `plotRectOutline`, `erase` (plot white), and `floodFill(buf, x, y, color)` (iterative stack, 4-connected, exact color match; no-op when target equals fill color).
-- Every write goes through `setPixel`, which ignores out-of-bounds coordinates (clipping).
-- Canvas has `imageSmoothingEnabled=false` and CSS `image-rendering: pixelated`. The palette has 16 distinct colors, and tools only write palette colors or white.
-- PNG encode and decode use `canvas.toBlob` and `createImageBitmap`. Decode failure shows an "image is invalid" dialog and keeps the canvas.
+Explorer behavior: tab titles are cut to 12 characters in the tab bar. A search sets the address to the query when it starts with `http`, otherwise to `http://chronos.net/` + the lowercase query with runs of non-alphanumerics replaced by `-`. `welcome.com` and `http://welcome.com` show the built-in portal. Other queries call `askNeuralBrain(q, 'browser')` and insert the reply as HTML into the viewport. Clicking a link searches its `data-search` value or its text.
 
-### API_Client (`core/apiClient.js`)
+### main.js
 
-`health()`, `chat()`, `listDocuments(kind?)`, `getDocument(id)`, `createDocument()`, `updateDocument()`, `deleteDocument()`. Built on `fetch` with `AbortController` timeouts (health 2 s, others 10 s). Errors normalize to `{kind: 'network'|'timeout'|'http'|'validation', message}`.
+Key functions:
 
-### Backend (`/backend/app`)
+```js
+triggerGracefulShutdown(): void
+getByteChatContainer(): HTMLElement          // loads chronos_byte_html on first call
+ensureGreetingBanner(), showBootGreeting(), openFullChatLog(), closeByteBubble(): void
+saveByteMemory(container): void              // chronos_byte_html + last 20 context lines
+async executeSmartOSWorkflow(rawText): Promise<string | null>
+async sendByteMessage(): Promise<void>
+syncLockLeds(e: KeyboardEvent): void         // reads getModifierState for NumLock, CapsLock, ScrollLock
+renderCalendar(), updateLiveClock(): void
+```
 
-| Endpoint | Behavior |
-|---|---|
-| `GET /api/health` | `{status:"ok", version}` |
-| `POST /api/chat` | `ChatRequest` to `ChatResponse`; 503 on service failure or an 8 s timeout |
-| `POST /api/documents` | Create; 201 with Document |
-| `GET /api/documents?kind=` | List, optionally filtered |
-| `GET /api/documents/{id}` | Read; 404 if missing |
-| `PUT /api/documents/{id}` | Replace name and content; advance `updated_at` |
-| `DELETE /api/documents/{id}` | Remove; 404 if missing |
+Other wiring: desktop icons and Start items with `data-open`, Start toggle, Sign Out, login OK, tray popups (only one open at a time), Wi-Fi toggle, volume slider and mute checkbox, clock (1 s interval), mouse parallax (`±42.5 px`, `±22.5 px`), mouse button highlight, and key highlight by `data-code`.
 
-- `DocumentStore` protocol: `create`, `get`, `list(kind)`, `update`, `delete`. The default implementation writes one JSON file per Document under the configured directory using atomic write (temp file plus rename), so a restart on a persistent volume keeps data.
-- `ChippyService`: `reply(message, app_id, context) -> str`. Without credential it uses a deterministic rule engine, a pure function of its inputs. With credential it calls the provider under an 8 s timeout and wraps failures into a `ChippyUnavailable` error that the router maps to 503. All replies start with a persona line naming "Chippy" and "Chronos 95", and are truncated to 4000 characters.
-- `config.py` reads `CHIPPY_API_KEY`, `ALLOWED_ORIGIN`, `DOCUMENT_STORE_DIR`. Startup checks the store directory is set and writable, otherwise writes the cause to stderr and exits non-zero within 10 s. `CORSMiddleware` allows only `ALLOWED_ORIGIN`, and allows no origins when unset.
-- Container: `python:3.11-slim`, non-root user, `HEALTHCHECK` on `/api/health`, volume mount for the store. `docker-compose.yml` starts `backend` and an `nginx`-style static `frontend` server in one `docker compose up`.
+Boot greeting: on RUNNING the bubble is shown without the `expanded` class and hidden after 5 s unless the input has focus or the chat is expanded.
 
-### Compliance scanner (`tools/compliance_scan.py`)
+### localStorage keys
 
-Pure function `scan(files: dict[path, text], rules) -> list[Finding(path, line, rule)]` plus a CLI over tracked files. Rules:
+| Key | Written by | Content |
+|---|---|---|
+| `chronos_theme` | `applyTheme` | One of `theme-teal`, `theme-matrix`, `theme-sunset`, `theme-space` |
+| `chronos_notepad` | NotePad input, Clear, Undo, AI, `writeToNotepad` | Full NotePad text |
+| `chronos_byte_html` | `saveByteMemory`, paint-vision handler | `innerHTML` of the Byte chat history |
+| `chronos_byte_context` | `saveByteMemory` | JSON array of the last 20 context lines |
 
-- Case-insensitive Trademark_List names.
-- Non-module `<script src>` or inline JS script tags.
-- Third-party UI framework imports or references (React, Vue, Angular, Svelte, jQuery).
+### Backend
 
-It exits non-zero and prints each offending path and line. The scanner and its own test fixtures must avoid containing literal trademark strings: the fixtures build them at runtime from fragments, and the scanner's rule list is stored in an allow-listed config file excluded from the scan with a documented exclusion.
+`app/main.py`:
+
+```python
+GET  /health            -> {"status": "online", "os": "Chronos 95", "engine": "FastAPI Neural Bridge"}
+POST /api/brain         body BrainRequest        -> {"reply": str, "mode": str}
+POST /api/paint-vision  body PaintVisionRequest  -> {"reply": str}
+mount "/" StaticFiles(directory=<repo>/frontend, html=True)   # only if the directory exists
+```
+
+CORS allows all origins, methods and headers, with credentials. The static mount is registered last so the API routes take precedence.
+
+`BrainService` (`brain_service.py`, singleton `brain_service`):
+
+```python
+class BrainService:
+    def _get_config(self) -> tuple[str, str, str]   # (api_key, api_url, model)
+    async def process_prompt(self, prompt: str, mode: str = "assistant") -> str
+    def _clean_llm_output(self, text: str, mode: str) -> str
+    async def _call_groq_text(self, prompt, mode, api_key, api_url, env_model) -> str  # "" on failure
+    def _smart_local_brain(self, prompt: str, mode: str) -> str
+    async def analyze_canvas_image(self, image_base64: str, prompt: str) -> str
+```
+
+`_get_config` loads `backend/.env`, or the repo-root `.env` if the first is missing, with `override=True`. It reads `LLM_API_KEY` (whitespace and quotes stripped), `LLM_API_URL` (default `https://api.groq.com/openai/v1/chat/completions`) and `LLM_MODEL` (default `llama-3.3-70b-versatile`). It is called on every request.
+
+### Dual-engine flow in BrainService
+
+```mermaid
+flowchart TD
+  P[process_prompt] --> E{prompt blank?}
+  E -- yes --> G["fixed greeting string"]
+  E -- no --> K{LLM_API_KEY set?}
+  K -- no --> F[_smart_local_brain]
+  K -- yes --> T[_call_groq_text]
+  T --> R{non-empty cleaned reply?}
+  R -- yes --> OUT[return LLM reply]
+  R -- no, all models failed --> F
+  F --> OUT2[return local reply]
+```
+
+Text engine (`_call_groq_text`):
+
+- Model list, in order, without duplicates and skipping empty values: `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `LLM_MODEL`, `openai/gpt-oss-120b`, `openai/gpt-oss-20b`.
+- One `httpx.AsyncClient(timeout=22.0)` is shared by the loop. The timeout applies per request.
+- Payload: system prompt by mode, user prompt, `temperature` 0.5 for `notepad` and 0.65 otherwise, `max_tokens` 900.
+- For each model: a 200 response with non-empty cleaned content is returned. A non-200 status, an exception or empty content moves on to the next model.
+- System prompts: `browser` (Explorer HTML using `web-article`, `web-hero`, `web-grid`, `web-card`, links with `data-search`), `notepad` (direct text only), `assistant` (Byte). Unknown modes use `assistant`.
+- `_clean_llm_output` removes `<think>...</think>` blocks, strips `` ```html `` and `` ``` `` fences for `browser`, and drops a leading and trailing fence line for `notepad`.
+
+Local engine (`_smart_local_brain`):
+
+- `notepad`: reads a limit from the first `N pointer|point|bullet|step|line|item` match (default 5). Uses the text after `REFERENCE WEBPAGE CONTENT:` if present. Splits on sentence ends and newlines, keeps fragments longer than 15 characters that do not start with `USER INSTRUCTION`, takes the first `limit`, and returns them as `• ` lines. If no fragment qualifies it returns the whole prompt as one bullet.
+- Any other mode: `"Processed your request!"`.
+
+Vision engine (`analyze_canvas_image`):
+
+- Takes the part of `image_base64` after the last comma.
+- With a key and image data: tries `meta-llama/llama-4-scout-17b-16e-instruct`, `meta-llama/llama-4-maverick-17b-128e-instruct`, `llama-3.2-11b-vision-preview` with `timeout=20.0`, `temperature` 0.6 and `max_tokens` 350. The first 200 response is returned stripped.
+- If every vision model fails it calls `process_prompt` with a color-advice prompt in mode `assistant`.
+- With no key or no image data it returns the fixed tip that suggests `#FF6B35` and `#FFD166`.
+
+### Deployment
+
+- `backend/Dockerfile`: `python:3.11-slim`, workdir `/code`, installs `requirements.txt`, copies `./app`, exposes 8000, runs `uvicorn app.main:app --host 0.0.0.0 --port 8000`. The frontend is not copied into the image.
+- `docker-compose.yml`: service `chronos-backend`, build `./backend`, port `8000:8000`, `env_file: ./backend/.env`, `restart: unless-stopped`.
+- `requirements.txt`: fastapi 0.115.0, uvicorn[standard] 0.30.6, pydantic 2.9.2, python-dotenv 1.0.1, httpx 0.27.2, pytest 8.3.3, hypothesis 6.112.1.
 
 ## Data Models
 
-### Frontend
+### Store state
 
-```
-PowerState = 'OFF' | 'BOOTING' | 'RUNNING' | 'SHUTTING_DOWN'
-TransitionResult = { ok: true } | { ok: false, reason: string }
-WindowRecord = { id, appId, title, x, y, w, h, minimized, maximized, restoreRect|null, z }
-WindowModel  = { windows: Map<id, WindowRecord>, focusedId: id|null, nextZ: number }
-Rect = { x, y, w, h }
-PixelBuffer = { width: 320, height: 240, data: Uint8ClampedArray(320*240*4) }
+```ts
+interface State {
+  power: 'OFF' | 'BOOTING' | 'RUNNING' | 'SHUTTING_DOWN'; // initial 'OFF'
+  volume: number;   // 0..1, initial 0.8
+  muted: boolean;   // initial false
+  locks: { num: boolean; caps: boolean; scroll: boolean }; // initial { true, false, false }
+}
 ```
 
-### Backend (Pydantic v2)
+### App config
+
+```ts
+interface AppConfig {
+  title: string;
+  width: string;    // CSS, e.g. '510px'
+  height: string;
+  left: string;
+  top: string;
+  html: string;                       // window body markup
+  onMount: (win: HTMLElement) => void;
+}
+```
+
+### Window manager state
+
+```ts
+openWindows: { [appId: string]: HTMLElement }   // at most one window per appId
+zIndexCounter: number                            // starts at 10, incremented on open and focus
+```
+
+### Byte chat context
+
+`byteChatContext: string[]` holds lines of the form `User: ...` and `Byte: ...`. `localStorage.chronos_byte_context` stores `JSON.stringify(byteChatContext.slice(-20))`. The prompt for the assistant is `byteChatContext.slice(-10).join('\n')`.
+
+### Request models (backend)
 
 ```python
-class DocumentKind(str, Enum): text = "text"; image = "image"
+class BrainRequest(BaseModel):
+    prompt: str = Field(..., max_length=8000)
+    mode: str = Field(default="assistant")
 
-class DocumentIn(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
-    kind: DocumentKind
-    content: str
-    # model_validator:
-    #   text  -> len(content) <= 100000
-    #   image -> strict base64 decode; PNG signature 89 50 4E 47 0D 0A 1A 0A;
-    #            decoded size <= 1_048_576
-
-class DocumentUpdate(BaseModel):   # kind is immutable
-    name: str = Field(min_length=1, max_length=100)
-    content: str                   # validated against the stored kind in the router/store
-
-class Document(DocumentIn):
-    id: str                        # uuid4
-    created_at: datetime
-    updated_at: datetime
-
-class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=2000)
-    app_id: str | None = None
-    context: str = Field(default="", max_length=10000)
-
-class ChatResponse(BaseModel):
-    reply: str = Field(min_length=1, max_length=4000)
-
-class HealthResponse(BaseModel):
-    status: Literal["ok"]
-    version: str
-
-class ErrorBody(BaseModel):
-    detail: str
+class PaintVisionRequest(BaseModel):
+    image_base64: str = Field(..., max_length=2_500_000)
+    prompt: str = Field(default="Analyze this drawing", max_length=2000)
 ```
 
-Validation failures become HTTP 422 with `[{field, reason}]`. Because validation runs before the store is touched, a rejected request leaves the Document_Store unchanged.
+### Response shapes
 
-### Persistence format
-
-One file `<id>.json` per Document containing the `Document` JSON (ISO-8601 timestamps). Reading parses with `Document.model_validate_json`.
+```json
+// GET /health
+{ "status": "online", "os": "Chronos 95", "engine": "FastAPI Neural Bridge" }
+// POST /api/brain
+{ "reply": "<string>", "mode": "<echo of request mode>" }
+// POST /api/paint-vision
+{ "reply": "<string>" }
+// Validation failure (FastAPI default)
+{ "detail": [ { "loc": [...], "msg": "...", "type": "..." } ] }   // HTTP 422
+```
 
 ## Correctness Properties
 
 *A property is a characteristic or behavior that should hold true across all valid executions of a system-essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
-Reflection note: Store criteria 1.1 to 1.5 and 1.10 collapse into two properties (state validity and transition correctness). Bus ordering, isolation, and unsubscribe collapse into one. Move clamp, resize clamp, and focus/stack invariants stay separate because they exercise different functions. Eraser and clipping fold into one raster property, and no-anti-aliasing folds into the pencil/line palette-closure property. Backend create/read, update, and store read-after-write fold into one CRUD model property. Boundary properties for text, image, chat, and context are merged into one parameterized boundary property per side (Frontend validators, Backend models).
+Only properties that hold for the current code are listed. Property 1 is the only one already verified by an automated test. The others are statements about the current code that no test checks yet.
 
-### Property 1: Power state is always valid and transitions follow the table
+### Property 1: Brain service always returns a non-empty string (verified by `test_brain_pbt.py`)
 
-*For any* sequence of 0 to 50 requested transition values (valid states and arbitrary other values), after every request the Store holds a Power_State in {`OFF`, `BOOTING`, `RUNNING`, `SHUTTING_DOWN`}. The state changes only for OFF to BOOTING, BOOTING to RUNNING, RUNNING to SHUTTING_DOWN, SHUTTING_DOWN to OFF. Every accepted request publishes exactly one `power:changed` with the correct previous and next values, and a subscriber reading the Store during delivery sees the new state. Every rejected request leaves the state unchanged, returns a rejection, and publishes exactly one `error:invalid-transition` carrying the current and requested values.
+For any prompt string of 0 to 500 characters and any mode in `browser`, `notepad`, `assistant`, `unknown`, `process_prompt` returns a `str` of length greater than 0.
 
-**Validates: Requirements 1.1, 1.3, 1.4, 1.5, 1.10, 14.4, 14.5**
+**Validates: Requirements 21.1, 21.2**
 
-### Property 2: Event_Bus delivery, isolation, and unsubscribe
+This property holds because blank prompts return the fixed greeting, LLM replies are only returned when non-empty after cleaning, and the local fallback returns non-empty text for every input except a `notepad` prompt that asks for `0` items (for example "0 points"). That case yields an empty string from `_smart_local_brain`, and the existing generator is unlikely to produce it.
 
-*For any* set of subscribers across event names, including subscribers that throw and subscribers that unsubscribe, publishing an event delivers it to exactly the subscribers registered under that event name at publication time, in subscription order, with no delivery to other event names, none to unsubscribed handlers, and with throwing subscribers not preventing delivery to the rest.
+### Property 2: Blank prompts get the fixed greeting
 
-**Validates: Requirements 1.6, 1.7, 1.8, 14.6**
+For any string made only of whitespace characters and any mode, `process_prompt` returns "Hey! Tell me what you'd like to open, write, draw, or search." without contacting the LLM.
 
-### Property 3: Rig view model is total and ignores invalid states
+**Validates: Requirements 19.2**
 
-*For any* Power_State value, `rigViewModel` returns LED unlit and a black screen with no effects for `OFF`; green LED for `BOOTING` and `RUNNING`; amber for `SHUTTING_DOWN`; effects enabled for all non-`OFF` states; `pressed` true exactly when the state is not `OFF`. *For any* value outside the four states it returns `null`, and the rig retains its current rendering.
+### Property 3: Model candidate list is ordered and unique
 
-**Validates: Requirements 2.2, 2.3, 2.4, 2.5, 2.11, 3.8, 3.9**
+For any value of `LLM_MODEL`, the candidate list used by `_call_groq_text` starts with `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, contains no duplicates and no empty entries, and ends with `openai/gpt-oss-120b`, `openai/gpt-oss-20b` (minus any of these already present earlier).
 
-### Property 4: Power button routing
+**Validates: Requirements 19.7**
 
-*For any* Power_State and any number of `power:button-pressed` events, the requested transition is `BOOTING` from `OFF`, `SHUTTING_DOWN` from `RUNNING`, and no transition (state unchanged) from `BOOTING` or `SHUTTING_DOWN`. The rig publishes the press event only when the state is `OFF` or `RUNNING`.
+### Property 4: Cleaning removes reasoning blocks
 
-**Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5**
+For any text and any mode, `_clean_llm_output` returns a string that contains no `<think>...</think>` block, and applying it a second time with the same mode returns the same string.
 
-### Property 5: Boot sequence completes exactly once
+**Validates: Requirements 19.10**
 
-*For any* health-check outcome (success, error, or timeout), any optional Escape time during boot, any number of extra Escape presses, and any optional early exit from `BOOTING`, the Boot_Sequencer displays stages in the order memory test, hardware list, splash when it runs to completion, with each visible at least 500 ms. It publishes exactly one `boot:complete` no later than 6000 ms after boot start, or none if the state left `BOOTING` first. It publishes none after a prior completion, and an Escape publishes completion within 200 ms.
+### Property 5: Local notepad fallback respects the requested bullet count
 
-**Validates: Requirements 4.1, 4.2, 4.3, 4.7, 4.8, 4.9, 4.10**
+For any prompt in mode `notepad` that asks for `N` items with `N >= 1` using one of the supported words (pointer, point, bullet, step, line, item), `_smart_local_brain` returns at most `N` lines, and every line starts with "• ". Without such a phrase it returns at most 5 lines.
 
-### Property 6: Launch is gated and window registration is validated
+**Validates: Requirements 19.12, 19.13**
 
-*For any* App_Module candidate and registry, registration succeeds exactly when all App_Contract members are present and the id is unused. Failed registration leaves the registry unchanged and publishes `error:invalid-app` naming the missing members or the duplicate id. *For any* `app:launch-requested` event, a window is created only if the state is `RUNNING` and the id is registered. An unknown id publishes `error:invalid-app`. An app whose `mount` throws leaves no window and leaves the other windows' focus and stacking order unchanged.
+### Property 6: Local fallback in other modes is constant
 
-**Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 5.10**
+For any prompt and any mode other than `notepad`, `_smart_local_brain` returns "Processed your request!".
 
-### Property 7: Window model invariants under operation sequences
+**Validates: Requirements 19.15**
 
-*For any* sequence of 0 to 100 open, focus, minimize, restore, maximize, and close operations, after each operation at most one window is focused, exactly one is focused when a non-minimized window exists and none otherwise, every open window has a unique stacking order, a focused window is never minimized, and closing or minimizing the focused window moves focus to the topmost non-minimized window.
+### Property 7: Oversized request fields are rejected
 
-**Validates: Requirements 7.11, 7.12, 7.15, 7.16, 7.17, 7.18, 14.7**
+For any `prompt` longer than 8000 characters sent to `/api/brain`, or any `image_base64` longer than 2,500,000 characters or `prompt` longer than 2000 characters sent to `/api/paint-vision`, the response status is 422. For any valid body, the status is 200 and the body has the documented keys.
 
-### Property 8: Maximize round trip
+**Validates: Requirements 18.4, 18.5, 18.6, 18.7, 18.8**
 
-*For any* window rect, maximizing then un-maximizing restores the exact original position and size, and a maximized window equals the Desktop area above the Taskbar.
+### Property 8: Event bus delivers in subscription order
 
-**Validates: Requirements 7.19, 7.20**
+For any event name and any sequence of subscribed callbacks, `emit(name, data)` calls every callback for that name exactly once, in subscription order, with `data`, and calls no callback of another name.
 
-### Property 9: Move and resize clamping
+**Validates: Requirements 1.1**
 
-*For any* window rect, display size, and pointer displacement, the moved window has at least 40 px of its title bar inside the CRT_Display. *For any* resize request, the resulting size is within the minimum 200 by 120 and the maximum Desktop area above the Taskbar.
+### Property 9: Volume is clamped and effective volume honors mute
 
-**Validates: Requirements 7.9, 7.10**
+For any number `v` and any `muted` flag, after `setVolume(v, muted)` the state volume equals `min(1, max(0, v))`, and the emitted `effectiveVolume` equals 0 when muted and the clamped volume otherwise.
 
-### Property 10: Close-all closes everything despite failures
+**Validates: Requirements 1.4**
 
-*For any* set of open windows (including minimized ones) where any subset of `unmount` functions throws, `closeAll` calls each `unmount` exactly once, removes every window, publishes one `window:closed` per window, and leaves zero windows.
+### Property 10: Lock updates merge
 
-**Validates: Requirements 5.2, 5.8, 5.9, 7.13, 7.14**
+For any current locks and any partial locks object, after `setLocks` the state locks equal the current locks overridden by the given keys, and the emitted payload equals the state locks.
 
-### Property 11: Reset to fresh state on power off
+**Validates: Requirements 1.5**
 
-*For any* sequence of valid operations (window opens, focus changes, Start_Menu toggles, Chippy dismissals) followed by a transition to `OFF`, the window and shell state equal the freshly initialized state.
+### Property 11: Power state is stored and announced
 
-**Validates: Requirements 5.7**
+For any `PowerState` value, after `setPowerState(s)` the state power equals `s` and `POWER_STATE_CHANGED` was emitted with `s`.
 
-### Property 12: Shell view models
+**Validates: Requirements 1.3**
 
-*For any* registry of apps and any set of open windows, the desktop shows exactly one icon per registered app labeled with its title, and the Taskbar shows exactly one button per open window. *For any* title, the button label equals the title when it has 20 or fewer characters, and otherwise is at most 20 characters ending with an ellipsis. *For any* window state, the Taskbar button click maps to restore (minimized), minimize (focused), or focus (otherwise).
+### Property 12: Sound gain scales with volume and silences on mute
 
-**Validates: Requirements 6.1, 6.7, 6.8, 6.9, 6.10, 6.11**
+For any base gain `g > 0`, volume `v` in [0, 1] and muted flag, `getEffectiveGain(g)` equals 0 when muted or `v <= 0`, and `g * v` otherwise.
 
-### Property 13: Clock format
+**Validates: Requirements 2.4, 2.5**
 
-*For any* Date, `formatClock` returns `h:mm AM/PM` with hour 1 to 12 without a leading zero, minutes 00 to 59, and the correct AM/PM marker for the local time.
+### Property 13: Theme persistence round trip
 
-**Validates: Requirements 6.6**
+For any of the four theme classes, after `applyTheme(t)` the key `chronos_theme` equals `t`, and a new `init()` applies `t` to `#os-desktop`.
 
-### Property 14: Text length validators at the boundaries
+**Validates: Requirements 9.4, 9.5**
 
-*For any* string, `validateDocName` accepts exactly the lengths 1 to 100, `validateContent` accepts exactly lengths 0 to 100000, and `validateQuestion` accepts exactly lengths 1 to 2000. Boundary values and values one beyond are generated in every run.
+### Property 14: Opening an app twice keeps one window and focuses it
 
-**Validates: Requirements 8.4, 8.5, 8.6, 10.2, 10.3**
+For any known `appId` and any sequence of `openApp(appId)` calls, `openWindows` holds exactly one window for that id, and after each call that window has the highest z-index and is not minimized.
 
-### Property 15: NotePad dirty title and text round trip
+**Validates: Requirements 10.2, 10.8**
 
-*For any* document name and text pair, the window title contains an asterisk immediately after the name exactly when the text differs from the last saved content. *For any* text of 0 to 100000 characters, saving and then opening via the API (against an in-memory fake backed by the real Backend model) yields identical text.
+### Property 15: closeAll empties the window set
 
-**Validates: Requirements 8.13, 8.17**
+For any set of open windows, after `closeAll()` `openWindows` has no keys, and `closeApp(id)` returns `true` only for an id that was open.
 
-### Property 16: Chippy context truncation
+**Validates: Requirements 10.9, 10.10**
 
-*For any* NotePad text, the chat payload context equals the first 10000 characters of the text, and for text shorter than that, equals the text unchanged.
+### Property 16: NotePad append preserves existing text
 
-**Validates: Requirements 10.8, 10.9**
+For any existing NotePad text and any new text that is non-blank after trimming, `writeToNotepad(new, true)` leaves `chronos_notepad` equal to `trim(existing) + "\n\n" + trim(new)` when the trimmed existing text is non-empty, and to `trim(new)` otherwise. For a blank `new`, nothing changes.
 
-### Property 17: Raster operations respect bounds and palette
+**Validates: Requirements 16.3, 10.11**
 
-*For any* canvas buffer, tool, color, and sequence of points (including points outside 320x240), pixels outside the canvas are never touched, every pixel after the operation is either its prior value or the selected color (white for the eraser), and pencil strokes between consecutive samples form an 8-connected path with no gaps. The same operation applied twice yields the same result as applied once.
+### Property 17: Markdown formatting leaves no raw newlines
 
-**Validates: Requirements 9.4, 9.7, 9.8, 9.9, 9.16**
+For any string, `formatByteMarkdown` returns a string with no `\n` characters, and every `**x**` pair becomes `<b>x</b>`.
 
-### Property 18: Flood fill correctness and idempotence
+**Validates: Requirements 15.9**
 
-*For any* canvas and point, flood fill replaces exactly the 4-connected region sharing the clicked pixel's original color and changes no other pixel. Filling the same point again with the same color produces a canvas identical to the first fill.
+### Property 18: Explorer address is a slug
 
-**Validates: Requirements 9.6, 14.9**
+For any query that does not start with `http`, the active tab address matches `^http://chronos\.net/[a-z0-9-]*$`.
 
-### Property 19: Image round trip
+**Validates: Requirements 11.7**
 
-*For any* canvas, encoding to PNG, storing via the API, and decoding yields pixel data identical to the saved canvas.
+### Property 19: Window resize respects the minimum size
 
-**Validates: Requirements 9.17**
+For any resize drag on a non-maximized window, the resulting width is at least 260 px and the resulting height is at least 170 px.
 
-### Property 20: Document CRUD model consistency
-
-*For any* sequence of create, update, list (with optional kind filter), read, and delete operations on valid inputs, the Document_Store behaves like a simple in-memory dict model. Reads return exactly the most recently written content. Creates assign unique ids and equal timestamps. Updates keep the id, kind, and `created_at` and advance `updated_at`. List filters correctly, and returns an empty list when nothing matches. A deleted id returns 404 afterward.
-
-**Validates: Requirements 11.3, 11.4, 11.5, 11.6, 11.7, 11.17, 12.11**
-
-### Property 21: Document JSON round trip
-
-*For any* valid Document model, serializing to JSON and parsing it back yields an equivalent Document.
-
-**Validates: Requirements 11.18**
-
-### Property 22: Validation boundaries reject without side effects
-
-*For any* request body, valid inputs are accepted and invalid inputs return 422 with the offending field named and leave the Document_Store byte-for-byte unchanged. Boundary pairs are generated for each limit: chat message 1 and 2000 characters (and 0 and 2001), context 10000 (and 10001), text content 100000 (and 100001), decoded image 1,048,576 bytes (and 1,048,577). Non-base64 and non-PNG image content is always rejected. A nonexistent id returns 404 and leaves the store unchanged.
-
-**Validates: Requirements 11.2, 11.8, 11.9, 11.10, 11.12, 11.13, 11.14, 11.15, 14.1, 14.2, 14.3**
-
-### Property 23: Chippy replies are deterministic and in persona
-
-*For any* message, app id, and context (without a provider credential), two calls return the same reply, the reply length is 1 to 4000, and it names "Chippy" and "Chronos 95" and contains no Trademark_List name.
-
-**Validates: Requirements 10.10, 11.2, 11.19**
-
-### Property 24: Compliance scanner completeness
-
-*For any* generated set of files with injected Trademark_List names (in any letter case), non-module script tags, and third-party framework references at known lines, the scanner reports exactly those file and line locations and exits non-zero. For files without such content it reports nothing and exits zero.
-
-**Validates: Requirements 13.3, 13.4, 13.6, 13.10, 14.8**
+**Validates: Requirements 10.7**
 
 ## Error Handling
 
-| Condition | Handling |
-|---|---|
-| Invalid Power_State transition | Store rejects, retains state, publishes `error:invalid-transition` |
-| Subscriber throws | Event_Bus logs event name and error, continues delivery |
-| Invalid or duplicate App_Module, unknown app id, mount throws | `error:invalid-app`; shell shows an error dialog for failed launches; partial window removed |
-| Unmount throws | Logged; window removed anyway; `window:closed` still published |
-| Backend health check fails during boot | "Chippy offline" notice for at least 1 s; boot continues on schedule |
-| Save/Open API error, network failure, or 10 s timeout | Error dialog with the reason; text, id, and last-saved unchanged (NotePad) or canvas unchanged (PixelPaint) |
-| PNG cannot be decoded | "Image is invalid" dialog; canvas unchanged |
-| Chippy request error or 10 s timeout | Thinking indicator removed; fixed offline message; submission re-enabled; question retained |
-| Request fails Pydantic validation | 422 with `[{field, reason}]`; store untouched |
-| Unknown document id | 404 `ErrorBody`; store untouched |
-| Chippy service error or 8 s timeout | 503 `ErrorBody` |
-| Missing or unwritable store directory at startup | Message to stderr naming the store location; exit non-zero within 10 s |
-| `ALLOWED_ORIGIN` unset | CORS allows no origin |
-| Missing `CHIPPY_API_KEY` | Backend starts; deterministic rule engine is used |
-| Prefers-reduced-motion | Animations replaced by an instant state change |
+As built:
+
+- **LLM request failures.** A non-200 status, a network exception, a malformed JSON body, or empty content makes `_call_groq_text` try the next model. All exceptions inside the loop are swallowed with `except Exception: continue`. If every model fails the result is `""` and `process_prompt` uses the local fallback.
+- **Vision failures.** Same pattern with three vision models, then a text request through `process_prompt` in mode `assistant`.
+- **Missing key.** No LLM call is made. Text requests use the local fallback and vision requests return the fixed color tip.
+- **Blank prompt.** `process_prompt` returns the fixed greeting before reading any configuration.
+- **Invalid request bodies.** FastAPI and Pydantic answer with 422. There is no custom exception handler.
+- **Unhandled backend exceptions.** `process_prompt` and `analyze_canvas_image` do not catch errors outside the LLM loops (for example a failure in `_get_config`). Those would surface as HTTP 500.
+- **Local fallback edge case.** A `notepad` prompt that asks for `0` items produces an empty reply.
+- **Frontend network failures.** `askNeuralBrain` returns the "[FastAPI Offline] ..." text. `askPaintVision` falls back to `askNeuralBrain`. Neither throws, so a failed call shows up as a normal chat or page reply.
+- **Frontend state errors.** `openApp` returns `null` for an unknown id. `closeApp` returns `false` for a window that is not open. `writeToNotepad` ignores blank text. The store does not validate power transitions.
+- **Missing DOM nodes.** Byte and paint code check for the bubble and history elements and return early when they are missing.
+- **Event bus.** A throwing subscriber stops the remaining subscribers of that emit, because callbacks are not wrapped.
 
 ## Testing Strategy
 
-PBT is applicable to this feature's pure logic: the Store state machine, Event_Bus, window model, geometry, raster routines, validators, formatters, Pydantic models, Document_Store, Chippy rule engine, and the compliance scanner. It is not used for DOM rendering, CSS animation, Docker, or network wiring, where example, smoke, and integration tests apply.
+### Existing test
 
-### Property-based tests
+`backend/app/tests/test_brain_pbt.py` contains one Hypothesis test, `test_brain_service_never_crashes_on_arbitrary_input`. It generates `prompt = st.text(min_size=0, max_size=500)` and `mode` from `["browser", "notepad", "assistant", "unknown"]`, runs `asyncio.run(brain_service.process_prompt(prompt, mode))`, and asserts the result is a `str` with length greater than 0. It uses Hypothesis defaults (100 examples). It does not carry a feature-tag comment.
 
-- **Backend:** Hypothesis, with `@settings(max_examples=100)` at minimum and `RuleBasedStateMachine` for Property 20. Properties 20 to 23 and the scanner (Property 24) live in `backend/tests` and `tools` tests. Requests go through FastAPI's `TestClient` against a temporary store directory.
-- **Frontend:** `fast-check` with `numRuns >= 100` under the Node `node:test` runner, as dev-only tooling that is not loaded by the shipped pages. Properties 1 to 19 target pure modules with injected fake timers, a fake bus, and a fake API.
-- **Single test per property.** Each property is implemented by exactly one property-based test, tagged with a comment: `Feature: chronos-95-retro-os, Property {number}: {property text}`.
-- Failures report test name and reason, and the runner exits non-zero (Requirement 14.10).
+Run from `backend/`:
 
-### Unit and example tests
+```
+pytest app/tests
+```
 
-- Rig rendering per state, power button keyboard activation, focus indicator, and ARIA attributes (jsdom).
-- Boot screens and shutdown text, Start_Menu and keyboard navigation, double-click launch, error dialog on a failed launch.
-- NotePad flows with a mocked API client: Save/Open/New, close confirmation (Save, Discard, Cancel), and error retention.
-- PixelPaint initial state (320x240 white, 16 colors, tools), File menu flows, invalid PNG handling.
-- Chippy flows: greeting, pending indicator, offline message, dismiss, and the "Ask Chippy about this text" visibility.
-- Backend: health body, 503 on a failing Chippy service, CORS allow and deny, startup exit on an unwritable store directory.
+Network note: `process_prompt` reads `backend/.env` on every call. When `LLM_API_KEY` is set, each generated non-blank example sends real requests to `LLM_API_URL`, with up to five models at 22 seconds each. The test is then slow, depends on the network and can use API quota. With no key set it only exercises the local fallback. Hypothesis may also report a deadline problem in the keyed case.
 
-### Smoke and integration tests
+### Gaps in automated coverage
 
-- Repository layout (Requirement 13.1, 13.2), `type="module"` only, no framework references, and the trademark scan run against the real repo in CI.
-- CSS contains `prefers-reduced-motion` handling and animation durations in the 400 to 1000 ms range.
-- Docker: image builds on Python 3.11+, container runs as non-root, `docker compose up` starts both services, the index page is served within 60 s, `/api/health` answers within 2 s, and a restart with a persistent volume keeps documents. These run as 1 to 3 example integration tests, not PBT.
+- There is no frontend test suite. Properties 8 to 19 are not covered by tests.
+- There are no tests of the FastAPI endpoints (Property 7) or of the BrainService internals (Properties 2 to 6).
+- `backend/tests/` contains only `.gitkeep`.
 
-### Traceability
+### Approach for new tests
 
-Requirements 1.9, 7.21, 7.22, 13.5, and 13.7 to 13.9 are architectural and are enforced by the compliance scanner and code review rather than by runtime tests. Requirements 2.6 to 2.8 and 6.12 are verified by example tests and manual accessibility review. Full WCAG validation requires manual testing with assistive technologies and expert review.
+Property-based testing applies to the pure logic: `_clean_llm_output`, `_smart_local_brain`, the candidate list, the store, the event bus, `getEffectiveGain`, `formatByteMarkdown` and the Explorer slug. A property-based library must be used (Hypothesis for Python; fast-check would fit the JS modules). Each property should run at least 100 iterations and be tagged `Feature: chronos-95-retro-os, Property N: <title>`.
+
+Example-based tests fit the rest:
+
+- Boot and shutdown timers (1.5 s, 3.4 s, 2.2 s) with fake timers.
+- `askNeuralBrain` and `askPaintVision` fallbacks with a mocked `fetch`.
+- `/health`, `/api/brain` and `/api/paint-vision` with FastAPI `TestClient`, with `brain_service` mocked.
+- `BrainService` model fallthrough with a mocked `httpx.AsyncClient`.
+
+UI rendering (hardware rig, CSS, window layout, tray popups, paint tools) is not suited to property tests. It would be covered by manual checks or screenshot tests, and none exist.
+
+## Known gaps
+
+These notes are not requirements. They match the "Known gaps" in `requirements.md`.
+
+- The assistant is named Byte, but the steering file names it Chippy.
+- Window and app logic sits in `osApps.js` and `main.js` and touches the DOM directly. It is not split into separate `notepadApp.js` and `paintApp.js` plugin modules.
+- The Explorer welcome portal has a link label that contains a prohibited trademark string ("Linux vs ... 95 Architecture").
+- CORS allows all origins.
+- There is no `.env.example`.
+- The container runs as root, has no health check and does not include the frontend.
+- The property-based test can make network calls when a key is set in `.env`.
+- The Store does not validate power state transitions.
+- Byte replies are inserted with `innerHTML`.
+- The Event_Bus has no unsubscribe and no error handling around callbacks.
